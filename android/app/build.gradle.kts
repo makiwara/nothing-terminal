@@ -14,7 +14,7 @@ val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
-val terminalsWsUrl: String = localProps.getProperty("TERMINALS_WS_URL") ?: ""
+val terminalsBaseUrl: String = localProps.getProperty("TERMINALS_BASE_URL") ?: ""
 val terminalsDeviceToken: String = localProps.getProperty("TERMINALS_DEVICE_TOKEN") ?: ""
 
 android {
@@ -28,8 +28,9 @@ android {
         versionCode = 1
         versionName = "0.1.0"
 
-        // Sentinel defaults; the connect screen surfaces a clear error when blank.
-        buildConfigField("String", "TERMINALS_WS_URL", "\"$terminalsWsUrl\"")
+        // Base URL of the stand-in / backend, e.g. http://192.168.1.10:8080. The
+        // app derives REST (http) and per-session WS (ws) endpoints from it.
+        buildConfigField("String", "TERMINALS_BASE_URL", "\"$terminalsBaseUrl\"")
         buildConfigField("String", "TERMINALS_DEVICE_TOKEN", "\"$terminalsDeviceToken\"")
     }
 

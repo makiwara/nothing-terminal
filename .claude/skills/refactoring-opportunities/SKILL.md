@@ -41,7 +41,7 @@ Analyse across these dimensions:
 5. Pattern correctness
    - Go: unchecked errors, goroutine/channel leaks, data races (would `go test -race` catch it?), mishandled WebSocket read/write lifecycles in `ws.go`/`hub.go`
    - Android: guessed Termux `TerminalEmulator`/`TerminalRenderer` API names (verify against v0.118.0), standalone-shell concerns leaking into the portable `net/`/`term/` packages
-   - Wire contract: frames or back-channel behaviour that drift from `PROTOCOL.md`
+   - Wire contract: frames or back-channel behaviour that drift from `specs/protocol.md`
    - Inconsistent use of established conventions (error reporting, coroutine dispatchers, resize/snapshot handling)
 
 Output format — group findings by dimension. For each finding:

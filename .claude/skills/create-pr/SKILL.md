@@ -68,7 +68,7 @@ Rules for the body:
 - Do not hard-wrap paragraphs inside the body. GitHub renders single newlines in PR descriptions as `<br>`, so a wrapped paragraph looks ragged. One paragraph = one line; paragraph breaks are blank lines (per `CLAUDE.md` § Markdown Documentation Standards).
 - A "work chunk" is a coherent unit of intent, not a file. Group commits by intent, not by path.
 - For every chunk, state the rationale. If you cannot, ask the user before writing it — do not invent a reason.
-- The acceptance checklist must be specific. "Run the build" is not specific; for Go changes name "`go test -race ./...`", for Android changes "`(cd android && ./gradlew assembleDebug lintDebug)`". For UI/terminal-rendering changes, give the screen and the action to perform (e.g. attach to `./termshare -- htop` and confirm colors/cursor). For protocol changes, point at the `PROTOCOL.md` frame affected.
+- The acceptance checklist must be specific. "Run the build" is not specific; for Go changes name "`go test -race ./...`", for Android changes "`(cd android && ./gradlew assembleDebug lintDebug)`". For UI/terminal-rendering changes, give the screen and the action to perform (e.g. attach to `./termshare -- htop` and confirm colors/cursor). For protocol changes, point at the `specs/protocol.md` frame affected.
 - Do not add a co-author trailer or any AI-generated marker unless the user asks.
 
 ## 4. Confirm with user

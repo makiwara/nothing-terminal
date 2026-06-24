@@ -1,118 +1,56 @@
 # nothing-terminal
 
-**Research question:** can a local terminal session running a *rich TUI* be exposed
-over SSH to another terminal client?
+Voice-driven terminal cockpit for the home server: operate the home machine's shell (rich TUIs) from an Android phone, hands-free. The deliverable is the Android client under `android/`. The `termshare` at the root is the development stand-in server — a harness implementing `specs/protocol.md` (the per-session WebSocket data plane) plus the control plane the app needs, so the client can be built and exercised before the real backend (the HOME-only Python `terminals/` service in `nothing-serious`) exists.
 
-**Answer: yes.** A rich TUI works over SSH because nothing re-renders it — the app
-writes ANSI/VT escape sequences to a PTY, those raw bytes are forwarded over the
-SSH channel, and the *client's own terminal* interprets them. You only need to get
-three things right: allocate a real PTY, propagate terminal size (SIGWINCH), and
-forward bytes raw (no line buffering).
+## The stand-in server
 
-This repo is `termshare`, a ~300-line Go proof-of-concept that goes one step
-further than the basic question: it shares **one live session with multiple
-participants at once** — the local user plus any number of remote clients using a
-**stock `ssh` client** (no custom client needed). It's a miniature of what
-tmux/tmate do.
+Sessions are demo-backed by default — each runs a generated ANSI stream, no PTY — so the harness runs anywhere, including sandboxes that can't allocate a PTY. Pass a command to add a real PTY-backed script (needs a genuine terminal).
 
-## Two ways to attach
+Requires Go 1.22+ (`brew install go`).
 
-The same `Hub` multiplexes a single PTY to any mix of participants. It exposes
-**two** transports:
-
-- **WebSocket** (`:8080/attach`) — the contract for the **Android app**. See
-  [PROTOCOL.md](PROTOCOL.md). This is the path that matters going forward; the
-  future `nothing-serious` Python service implements the same protocol.
-- **SSH** (`:2222`) — kept for quick manual testing with a stock terminal.
-
-Requires Go 1.21+ (`brew install go`). **Must run in a real terminal** (PTY
-allocation needs a genuine TTY; sandboxes return `ENXIO`).
-
-```bash
+```
 go build -o termshare .
-
-# Host a session (defaults to $SHELL; any TUI works):
-./termshare -- htop                  # serves WS :8080 + SSH :2222
-./termshare -ws :8080 -token secret  # require ?token=secret on WS attach
-
-# Attach over SSH (manual test):
-ssh -p 2222 -tt -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null localhost
-
-# Attach over WebSocket (what the app does) — e.g. with websocat:
-websocat 'ws://localhost:8080/attach?cols=80&rows=24'
+./termshare                       # serve :8080 with demo scripts (monitor, logs, build)
+./termshare -- htop               # also adds a real "htop" script (run in a real terminal)
+./termshare -token SECRET         # require ?token= or Authorization: Bearer on every endpoint
 ```
 
-Every attached client sees and drives the **same** live session; the PTY is sized
-to the smallest attached client. Logs go to stderr and will garble a local
-raw-mode session — redirect with `2>/tmp/termshare.log` if you also drive it
-locally, or run it headless (no TTY on stdin = server-only, no local attach).
-
-> This repo is the research spike + a **stand-in server** so the Android app can
-> be built before any `nothing-serious` work. See PROTOCOL.md for the wire format
-> the app targets.
-
-## How it works
+Endpoints (all optionally gated by `-token`):
 
 ```
-        ┌─────────── one child process (shell / htop / vim) ───────────┐
-        │                       one real PTY                            │
-        └───────────────▲───────────────────────────┬──────────────────┘
-            keystrokes   │ (merged)        output    │ (fanned out)
-                         │                           ▼
-                  ┌──────┴──────────────────────── Hub ───────────────────┐
-                  │  participants = local terminal + N ssh.Session(s)      │
-                  │  • output  → every participant                         │
-                  │  • input   ← any participant → the one PTY             │
-                  │  • PTY sized to the SMALLEST attached terminal         │
-                  └────────────────────────────────────────────────────────┘
-                         ▲                                  ▲
-                 local raw-mode stdin              gliderlabs/ssh server
-                                                   (stock `ssh` clients)
+GET    /scripts                      list the catalog
+GET    /sessions                     list the open ring
+POST   /sessions {script_id}         open a session
+DELETE /sessions/{id}                close a session
+GET    /sessions/{id}/attach         WebSocket stream (specs/protocol.md)
+POST   /sessions/{id}/voice          mock propose -> {transcript, action}
+POST   /sessions/{id}/send {action}  inject the confirmed action
 ```
 
-- **`hub.go`** — the transport-agnostic core: fan-out, input merge, and the
-  "size to the smallest terminal" policy (tmux's default, so no client is
-  truncated). Decoupled from the PTY so it's unit-testable.
-- **`main.go`** — wiring: spawns the child on a PTY (`creack/pty`), attaches the
-  local terminal as participant #0 (raw-mode stdin), and runs the SSH server
-  (`gliderlabs/ssh`), attaching each connection as another participant.
+The voice endpoints are a mock — there is no STT here. `/voice` returns a canned proposal (`?intent=stop` returns a Ctrl-C signal action); `/send` injects the action into the session, and a demo session echoes it on a `sent:` line so the path is visible.
 
-### Late-joiner repaint
-When a client joins mid-session, it has missed the bytes already drawn. `termshare`
-briefly nudges the PTY size to trigger SIGWINCH, so well-behaved full-screen apps
-repaint themselves at full fidelity. This is a cheap stand-in for what tmux does
-properly: maintain an in-memory model of the screen grid and re-emit it. That
-(via a VT emulator such as `hinshun/vt10x` or `charmbracelet/x/vt`) is the main
-thing to build next for robustness.
+## Architecture
 
-## Dependencies
+```
+  Android cockpit (android/)             termshare stand-in (this repo)
+  ┌───────────────────────────┐         ┌──────────────────────────────────┐
+  │ ring = HorizontalPager     │── REST ─│ Registry: scripts + session ring  │
+  │ page → RemoteTerminalView  │── WS ───│ Session → Hub → demo gen / PTY    │
+  │ voice → review → send      │── REST ─│ mock STT propose / send → inject  │
+  └───────────────────────────┘         └──────────────────────────────────┘
+```
 
-| Library | Role |
-|---|---|
-| [`github.com/gliderlabs/ssh`](https://github.com/gliderlabs/ssh) | Embeddable SSH server; PTY + window-change handling |
-| [`github.com/creack/pty`](https://github.com/creack/pty) | Allocate & resize the child's PTY |
-| [`golang.org/x/term`](https://pkg.go.dev/golang.org/x/term) | Raw mode + size for the local terminal |
+- `hub.go` — the per-session multiplexer: fan-out to attached clients, input merge, smallest-size resize. PTY-agnostic, unit-tested.
+- `session.go` — the registry, the script catalog, and the demo generator.
+- `control.go` — the REST control plane.
+- `ws.go` — the WebSocket data plane (`specs/protocol.md`).
 
-## Status, limitations & next steps
+## Run the client against it
 
-Verified: the multiplexing core (`go test -race`) — fan-out, input merge, and the
-smallest-size resize policy. The full PTY + SSH round trip is exercised by the
-manual two-terminal test above. (It can't be run inside a sandboxed CI/agent
-environment, which blocks PTY device allocation — `pty.Start` returns ENXIO.)
+See `android/README.md`. In short: run `./termshare`, install the app, point `TERMINALS_BASE_URL` at the Mac's LAN IP (`http://<mac-lan-ip>:8080`), and open a session from the menu.
 
-Not done (it's a prototype):
+## Notes
 
-- **No authentication** — accepts any connection. Do **not** expose to an
-  untrusted network. Real use needs `PublicKeyHandler` / authorized-keys.
-- **No true screen replay** — late joiners rely on the SIGWINCH nudge; add a VT
-  emulator for a faithful snapshot.
-- **No read-only / view-only participants**, no per-client cursor, no scrollback.
-- **Smallest-size policy** means one small window shrinks everyone (same tradeoff
-  tmux has without per-client windows).
-
-### Alternatives considered
-- **[Charm Wish](https://github.com/charmbracelet/wish)** — best path if the goal
-  were serving *your own* TUI app (each connection = a fresh session). We chose the
-  live-*sharing* model instead, which needs the multiplexer above.
-- **tmux / [tmate](https://tmate.io/)** — the production-grade version of exactly
-  this. tmate adds a relay so sharing works through NAT with no inbound port.
+- Not production; no real auth beyond the optional shared `-token`. The real backend in `nothing-serious` owns the security model.
+- The sandbox can't allocate PTYs (`pty.Start` → ENXIO); demo sessions need none. Run a real-shell script only in a genuine terminal.
+- Tests: `go test -race ./...`.

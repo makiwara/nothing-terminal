@@ -3,7 +3,7 @@ package com.humanemagica.nothing.terminal.net
 import org.json.JSONObject
 
 /**
- * The PROTOCOL.md control plane (JSON text frames). Binary frames carry raw
+ * The specs/protocol.md control plane (JSON text frames). Binary frames carry raw
  * terminal bytes and need no parsing.
  */
 object Protocol {

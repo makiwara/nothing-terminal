@@ -47,9 +47,7 @@ WebSocket message **type** selects the plane — no in-band framing/escaping.
 - A `resize` from any client recomputes the effective size; if it changed, the
   server resizes the PTY (→ `SIGWINCH` → the app repaints) and broadcasts the new
   `size` to all clients.
-- **Late joiners:** on attach the server provokes a repaint (the stand-in nudges
-  the PTY size; the Python service will replay a `pyte` screen snapshot). Either
-  way the client should expect a burst of output bytes right after connecting.
+- **Late joiners:** on attach the client should expect a burst of output bytes — the server repaints the current screen. The repaint mechanism is server-side and not part of this contract.
 - **Backpressure:** a client that can't keep up is disconnected rather than sent
   a partial stream (dropped bytes corrupt escape sequences). Reconnect for a
   fresh paint.

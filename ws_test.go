@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
@@ -12,7 +14,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// writerFunc adapts a func to io.Writer (used as the hub's input sink in tests).
+// writerFunc adapts a func to io.Writer (used as a hub sink in tests).
 type writerFunc func([]byte) (int, error)
 
 func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
@@ -29,13 +31,12 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Fatalf("timed out waiting for %s", what)
 }
 
-// TestWSAttach drives the full WebSocket <-> Hub wiring end to end WITHOUT a real
-// PTY: an io.Pipe stands in for the PTY master. It proves the three protocol
-// behaviours the Android app depends on — output fan-out (binary down), input
+// TestWSAttach drives the per-session WebSocket attach end to end without a PTY:
+// an io.Pipe stands in for the session's byte source. It proves the three
+// protocol behaviours the app depends on — output fan-out (binary down), input
 // (binary up), and the resize control plane (JSON both ways).
 func TestWSAttach(t *testing.T) {
 	pr, pw := io.Pipe()
-
 	var mu sync.Mutex
 	var sink bytes.Buffer
 	sinkW := writerFunc(func(p []byte) (int, error) {
@@ -52,10 +53,14 @@ func TestWSAttach(t *testing.T) {
 
 	h := newHub(pr, sinkW, setSz)
 	go h.pumpOutput()
+	sess := &Session{ID: "s1", hub: h}
+	reg := &Registry{sessions: map[string]*Session{"s1": sess}, order: []string{"s1"}}
 
-	srv := httptest.NewServer(h.serveWS(""))
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /sessions/{id}/attach", reg.serveAttach(""))
+	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/attach"
+	url := "ws" + strings.TrimPrefix(srv.URL, "http") + "/sessions/s1/attach"
 
 	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
@@ -63,7 +68,6 @@ func TestWSAttach(t *testing.T) {
 	}
 	defer conn.Close()
 
-	// Client reports its viewport -> server should resize the PTY to it.
 	if err := conn.WriteJSON(ctrl{T: "resize", Cols: 100, Rows: 30}); err != nil {
 		t.Fatalf("write resize: %v", err)
 	}
@@ -73,11 +77,9 @@ func TestWSAttach(t *testing.T) {
 		return lastCols == 100 && lastRows == 30
 	})
 
-	// Server output must reach the client as a binary frame.
 	go io.WriteString(pw, "rich-tui-bytes")
 	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	var gotOutput bool
-	var gotSize bool
+	var gotOutput, gotSize bool
 	for !gotOutput {
 		typ, data, err := conn.ReadMessage()
 		if err != nil {
@@ -98,7 +100,6 @@ func TestWSAttach(t *testing.T) {
 		t.Error("expected at least one size control frame before output")
 	}
 
-	// Client input (binary) must reach the PTY sink.
 	if err := conn.WriteMessage(websocket.BinaryMessage, []byte("keys!")); err != nil {
 		t.Fatalf("write input: %v", err)
 	}
@@ -107,4 +108,77 @@ func TestWSAttach(t *testing.T) {
 		defer mu.Unlock()
 		return strings.Contains(sink.String(), "keys!")
 	})
+}
+
+// TestControlPlane exercises the REST surface the cockpit uses — scripts, the
+// session ring, and the mock voice propose/send — against demo-backed sessions
+// (no PTY), so it runs anywhere.
+func TestControlPlane(t *testing.T) {
+	reg := newRegistry([]Script{{ID: "demo", Label: "Demo", demo: &demoSpec{title: "demo", color: 6}}})
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /scripts", reg.handleScripts)
+	mux.HandleFunc("GET /sessions", reg.handleListSessions)
+	mux.HandleFunc("POST /sessions", reg.handleOpenSession)
+	mux.HandleFunc("DELETE /sessions/{id}", reg.handleCloseSession)
+	mux.HandleFunc("POST /sessions/{id}/voice", reg.handleVoice)
+	mux.HandleFunc("POST /sessions/{id}/send", reg.handleSend)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	get := func(path string) (int, string) {
+		resp, err := http.Get(srv.URL + path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(b)
+	}
+	post := func(path, body string) (int, string) {
+		resp, err := http.Post(srv.URL+path, "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatalf("POST %s: %v", path, err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(b)
+	}
+
+	if code, body := get("/scripts"); code != 200 || !strings.Contains(body, `"demo"`) {
+		t.Fatalf("GET /scripts = %d %s", code, body)
+	}
+
+	code, body := post("/sessions", `{"script_id":"demo"}`)
+	if code != 201 {
+		t.Fatalf("POST /sessions = %d %s", code, body)
+	}
+	var sess struct{ ID string }
+	if err := json.Unmarshal([]byte(body), &sess); err != nil || sess.ID == "" {
+		t.Fatalf("open session body: %s", body)
+	}
+
+	if code, body := get("/sessions"); code != 200 || !strings.Contains(body, sess.ID) {
+		t.Fatalf("GET /sessions = %d %s", code, body)
+	}
+
+	if code, body := post("/sessions/"+sess.ID+"/voice", ""); code != 200 ||
+		!strings.Contains(body, `"git status"`) || !strings.Contains(body, `"text"`) {
+		t.Fatalf("voice propose = %d %s", code, body)
+	}
+
+	if code, _ := post("/sessions/"+sess.ID+"/send", `{"action":{"kind":"text","text":"hello world"}}`); code != 204 {
+		t.Fatalf("send = %d", code)
+	}
+	if got := reg.Get(sess.ID).lastSentText(); got != "hello world" {
+		t.Fatalf("after send, lastSent = %q, want %q", got, "hello world")
+	}
+
+	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/sessions/"+sess.ID, nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil || resp.StatusCode != 204 {
+		t.Fatalf("DELETE session = %v %v", err, resp)
+	}
+	if code, body := get("/sessions"); code != 200 || strings.Contains(body, sess.ID) {
+		t.Fatalf("ring not empty after close: %s", body)
+	}
 }

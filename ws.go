@@ -14,7 +14,7 @@ import (
 
 // The WebSocket endpoint is the contract the Android app codes against, and the
 // one the future nothing-serious `terminals/` service must implement
-// identically. See PROTOCOL.md.
+// identically. See specs/protocol.md.
 //
 //   Server -> client:  binary = raw terminal output; text = {"t":"size",...}
 //   Client -> server:  binary = input bytes;         text = {"t":"resize",...}
@@ -110,14 +110,21 @@ func (c *wsClient) close() {
 	})
 }
 
-// serveWS returns an HTTP handler that attaches each WebSocket connection to the
-// hub as a participant. If token is non-empty it is required as ?token=.
-func (h *Hub) serveWS(token string) http.HandlerFunc {
+// serveAttach returns the handler for GET /sessions/{id}/attach: it looks up the
+// session and wires the WebSocket to its hub as a participant. If token is
+// non-empty it is required as ?token= or Bearer.
+func (reg *Registry) serveAttach(token string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if token != "" && r.URL.Query().Get("token") != token {
+		if token != "" && reqToken(r) != token {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
+		sess := reg.Get(r.PathValue("id"))
+		if sess == nil {
+			http.Error(w, "no such session", http.StatusNotFound)
+			return
+		}
+		h := sess.hub
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			return
@@ -132,16 +139,16 @@ func (h *Hub) serveWS(token string) http.HandlerFunc {
 		h.setOnResize(id, client.sendSize)
 		ec, er := h.size()
 		client.sendSize(ec, er) // tell the client the current grid size up front
-		log.Printf("ws client attached: %s (%dx%d)", r.RemoteAddr, cols, rows)
+		log.Printf("ws attached: session=%s %s (%dx%d)", sess.ID, r.RemoteAddr, cols, rows)
 
 		defer func() {
 			h.remove(id)
 			client.close()
-			log.Printf("ws client detached: %s", r.RemoteAddr)
+			log.Printf("ws detached: session=%s %s", sess.ID, r.RemoteAddr)
 		}()
 
-		// Read loop: binary = input bytes (keystrokes + emulator responses);
-		// text = JSON control (resize).
+		// Read loop: binary = input bytes (the emulator's back-channel responses);
+		// text = JSON control (resize). User commands arrive via POST .../send.
 		for {
 			typ, data, err := conn.ReadMessage()
 			if err != nil {
