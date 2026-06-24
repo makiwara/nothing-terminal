@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CMD=$(jq -r '.tool_input.command // \"\"'); if printf '%s' \"$CMD\" | grep -qE '^[[:space:]]*git[[:space:]]+commit([[:space:]]|$)'; then REPO_ROOT=$(git rev-parse --show-toplevel); if git diff --cached --name-only | grep -q '^android/'; then JBR=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\"; [ -d \"$JBR\" ] && export JAVA_HOME=\"$JBR\"; \"$REPO_ROOT/android/gradlew\" -p \"$REPO_ROOT/android\" lintDebug 1>&2 || exit 2; fi; fi; exit 0",
+            "timeout": 300,
+            "statusMessage": "Running Android lint before commit..."
+          }
+        ]
+      }
+    ]
+  }
+}
