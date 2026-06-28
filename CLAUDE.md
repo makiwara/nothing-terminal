@@ -14,8 +14,9 @@ A voice-driven terminal cockpit for the user's home server: operate the home mac
 2. Instead of making assumptions, ask clarifying questions. Ask questions in small portions (one by one or up to five: depending on complexity and logical grouping).
 3. Do not make improvements if asked to analyse, just propose.
 4. Do not commit/deploy unless instructed.
-5. Do not introduce anything aspirational. Have an idea? Discuss with the user.
-6. When the user floats a 'maybe' or tentative suggestion, do not accept it at face value. Analyse the idea critically: is it conceptually sound, feasible, reasonable, proportionate to the task, and does it avoid unnecessary complexity? Give a professional opinion with concrete reasoning before proceeding. Do not give in easily.
+5. Do not create branches unless explicitly asked; commit to the current branch. The repo's history is direct-to-`main`.
+6. Do not introduce anything aspirational. Have an idea? Discuss with the user.
+7. When the user floats a 'maybe' or tentative suggestion, do not accept it at face value. Analyse the idea critically: is it conceptually sound, feasible, reasonable, proportionate to the task, and does it avoid unnecessary complexity? Give a professional opinion with concrete reasoning before proceeding. Do not give in easily.
 
 ## Documenting and Discovery
 1. This repo hosts its own `journal/` for the artifacts it owns — the contract (`specs/protocol.md`) and the Go stand-in (and the client while it lives here). Entries are flat, named `journal/YYYY-MM-DD_NN_slug.md`. Each repo journals its own half and references the others; never write into a sibling. The sibling design docs — read for context, never edit — are the backend brief `../nothing-serious/journal/v20/2026-06-24_05_terminals.md` and the phone-side UI design `../nothing-to-say/journal/002/2026-06-24_36_terminal_cockpit.md`. Don't duplicate their content; cross-reference it.
