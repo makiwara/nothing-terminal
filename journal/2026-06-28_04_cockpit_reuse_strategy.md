@@ -7,7 +7,7 @@ Decided how to build the new cockpit UX by reusing nothing-to-say: a hybrid keye
 ## Decision, by component
 
 - Design tokens (Pitch Cyan, PT Mono, dims). Copy into the standalone app's disposable `ui/theme/` (the mockups already encode the values). Too small to justify touching the sibling. Consolidate into a shared design module later, if and when the shared-library step happens.
-- Recorder (capture state machine + Opus encoder + slide-up surface). Copy-vendor the capture core into a new portable `voice/` package — a faithful, re-syncable copy, pinned to `nothing-to-say@8488823`, marked do-not-diverge. All cockpit-specific behaviour stays in native cockpit code, outside the vendored files.
+- Recorder. Copy-vendor the capture engine (state machine + Opus encoder) into a new portable `voice/` package — a faithful, re-syncable copy, pinned to `nothing-to-say@8488823`, marked do-not-diverge. Build the slide-up surface native against that engine's API (per `specs/ui/`), not by vendoring nothing-to-say's Compose surface — see the vendor-surface section for why. All cockpit-specific behaviour — the surface, the propose/send sink, the after-send review — stays in native code, outside the vendored files.
 - Ring, review, terminal. Build native here. The ring is a thin HorizontalPager pattern (pattern reuse, no shared code); the after-send review is cockpit-specific (our divergence from chat); the terminal is already Termux, not from nothing-to-say.
 - Shared library (C) and merge (D). Deferred. Revisit once the cockpit is proven and the architecture decision is made; extraction is far cheaper once the real shared surface is known.
 
@@ -15,19 +15,21 @@ Decided how to build the new cockpit UX by reusing nothing-to-say: a hybrid keye
 
 Vendor the capture core only, repackaged to `com.humanemagica.nothing.terminal.voice` under `android/app/src/main/java/com/humanemagica/nothing/terminal/voice/`, parallel to the portable `net/` and `term/`. On merge or a future shared-library step this package is the unit that gets swapped or extracted.
 
-Copy:
+Vendor (the engine — done):
 - `RecordingController.kt` — the Idle/Arming/Held/Locked/Options state machine; its sink is already routing-agnostic (`onSend: suspend (path, durationSec) -> Unit`).
-- `OpusRecorder.kt` + `OggOpusWriter.kt` — audio capture and Opus/Ogg encoding.
+- `OpusRecorder.kt` + `OggOpusWriter.kt` — audio capture and Opus/Ogg encoding (Concentus; API 28, no NDK).
 - `RecordingState.kt` — the shared active flag.
-- The pull gesture and the Compose surface (`chat/RecordingSurface.kt`), stripped of the chat-only `PhotoButton`/`CameraGlyph`.
 
 Shim, do not vendor:
-- `core.NtsLog`, `core.Storage` — adapt to the cockpit's own logging and recording-dir helpers (small adapters), rather than dragging in nothing-to-say's `core` package.
+- `core.NtsLog`, `core.Storage` — small cockpit adapters (logcat-only log; recording dir under `cacheDir`), rather than dragging in nothing-to-say's `core` package.
+
+Build native, do not vendor:
+- The Compose surface (`chat/RecordingSurface.kt`) and its pull gesture. Vendoring it looked right on paper, but on inspection it is heavily coupled to nothing-to-say's full `NtsDims`, `MaterialTheme` typography, and chat-layout assumptions (the inset is the chat-name header; `RecordPullArea` needs `atBottom`/`onFastScrollToBottom`; `PhotoButton`/`CameraGlyph`). A "faithful" copy would drag the whole theme and still need a heavy fork for landscape and the cockpit review flow — which defeats the re-syncable point of vendoring. So the vendor boundary stays at the engine (re-syncable), and the surface is built native against the controller's API (`state`/`top`/`elapsedSec`/`exit` flows; `arm`/`updateDrag`/`release`/`tapSend`/`tapCancel`; the `setHandleTop`/`setScreenHeight`/`mountAt` plumbing), to our `specs/ui/` design and token values.
 
 Leave behind (chat-side, not needed):
 - `VoiceRouter`, `VoiceSequencer`, `VoicePlayback`, `IncomingTranscriber`, `TranscriptStore`, `OutgoingStore` — routing, playback, on-device STT, and persistence. The cockpit uploads audio to the brain's propose call; it plays back nothing, transcribes nothing locally, and stores nothing.
 
-Divergence boundary: the cockpit's differences live entirely in code we own — the sink (which uploads to `POST …/voice` instead of a chat send) and the after-send transcribe/review flow (`specs/ui/review.md`). The vendored files stay close to upstream so recorder fixes re-sync rather than fork.
+Divergence boundary: the cockpit's differences live entirely in code we own — the native surface, the sink (which uploads to `POST …/voice` instead of a chat send), and the after-send transcribe/review flow (`specs/ui/review.md`). The vendored engine stays close to upstream so recorder fixes re-sync rather than fork.
 
 ## Why copy-vendor, not reimplement or share now
 
@@ -38,4 +40,6 @@ Divergence boundary: the cockpit's differences live entirely in code we own — 
 
 ## Status and next
 
-Decision recorded. The actual vendoring (copying the files, repackaging, stripping the chat bits, wiring the shims, and pointing the sink at propose/send) is the next step, not done here. No sibling is touched by this entry; the recorder is read-only context.
+The engine is vendored: `voice/` (the four files above) repackaged to `…terminal.voice` with provenance headers, plus the `core/` shims, the `RECORD_AUDIO` permission, and the Concentus dependency (`io.github.jaredmdobson:concentus:1.0.2`, Maven Central). `:app:compileDebugKotlin` and `:app:lintDebug` are green. Capture itself (mic, audio focus, OGG/Opus output) is unverified — it needs a real device.
+
+Next: build the native landscape surface against the vendored controller, wire the `onSend` sink to `POST …/voice` (propose), and add the after-send transcribe/review flow that calls `POST …/send` on Confirm. The engine is not yet wired into the UI; `CockpitScreen` still uses the stub recorder. No sibling was touched; the recorder is read-only context.

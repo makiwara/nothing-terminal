@@ -8,6 +8,7 @@ composeBom = "2024.12.01"
 coroutines = "1.9.0"
 okhttp = "4.12.0"
 termux = "v0.118.0"
+concentus = "1.0.2"
 junit = "4.13.2"
 
 [libraries]
@@ -22,6 +23,9 @@ androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-toolin
 androidx-material3 = { group = "androidx.compose.material3", name = "material3" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+# Pure-Java Opus encoder (Concentus): the vendored voice/ recorder encodes Opus on API 28
+# without NDK or MediaRecorder. Served from Maven Central.
+concentus = { group = "io.github.jaredmdobson", name = "concentus", version.ref = "concentus" }
 # Termux terminal engine (VT/ANSI parser) + its real cell renderer, served via JitPack.
 # terminal-view transitively pulls terminal-emulator. NOTE: the wiki's `com.termux:...`
 # coordinate 401s on JitPack; the working form is the canonical multimodule path

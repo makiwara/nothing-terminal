@@ -80,6 +80,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)
     implementation(libs.termux.terminal.view)
+    implementation(libs.concentus)
 
     testImplementation(libs.junit)
 }
