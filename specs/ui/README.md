@@ -2,7 +2,7 @@
 
 The phone-side UI for the voice-driven terminal cockpit: a landscape, voice-only surface that attaches to `specs/protocol.md` sessions, renders rich TUIs, and drives input by voice with a confirm step. This is the design contract for building the Compose UI; the rendered mockups in `specs/mockups/` are the visual source of truth, and each surface below cites the card it comes from.
 
-Status: designed (mockups + this spec). Authoritative for the phone UI. Where it conflicts with the sibling design note `../../../nothing-to-say/journal/002/2026-06-24_36_terminal_cockpit.md` (read-only context), this spec wins — see Deltas below. The in-tree `android/` app is the proven prototype and predates this design; aligning it (no ☰, manager page, two-stage review, inverted treatment) is the pending rework, so the code does not yet match this spec.
+Status: designed (mockups + this spec). Authoritative for the phone UI. Where it conflicts with the sibling design note `../../../nothing-to-say/journal/002/2026-06-24_36_terminal_cockpit.md` (read-only context), this spec wins — see Deltas below. The in-tree `android/` app now implements this design — the ring with a manager page and preset selector (no ☰), the inverted treatment, and the voice flow (vendored recorder → propose → editable transcribe/review → confirm). Still pending: device verification of capture and gesture feel, the full position-interpolated surface choreography (the current one is state-snapped), and the v1 control-plane metadata the manager will show (uptime, exited state).
 
 ## The parts
 

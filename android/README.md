@@ -22,16 +22,14 @@ com.humanemagica.nothing.terminal
 
 ## The cockpit
 
-The shipped prototype is described below. The target UI — a landscape ring with a manager page instead of a menu, a two-stage voice review, and inverted capture/management surfaces — is specced in [`../specs/ui/`](../specs/ui/README.md) with mockups in `../specs/mockups/`. Aligning the prototype to it is the pending rework, so this section still reflects the older behaviour.
+Landscape, full-screen terminal, voice-only — no keyboard. Specced in [`../specs/ui/`](../specs/ui/README.md) with mockups in `../specs/mockups/`.
 
-Landscape, full-screen terminal, voice-only — no keyboard.
+- Swipe horizontally through the ring. The first page is the manager (lists open terminals, Halt each, Add new); the rest are terminals, each just a small title over the cell grid.
+- Drag vertically on a terminal to scroll scrollback.
+- Add new terminal → the preset selector (a separate screen); pick a preset to open a panel in the ring.
+- Swipe up from the bottom handle to record; release sends, or pull to the top to lock (Cancel / Send). The audio uploads to propose; the transcript appears (editable via the system keyboard) with Cancel / Adjust / Confirm, and only Confirm injects.
 
-- Swipe horizontally to move through the ring of open sessions.
-- Drag vertically to scroll scrollback.
-- Top-right ☰: close the active terminal, or open a new one from the script list.
-- Hold the bottom handle to speak; release to propose; the transcript appears with Cancel / Adjust / Send, and only Send injects.
-
-The recorder is a stub here: it captures no real audio. The stand-in's mock STT ignores the upload and returns a canned proposal. On merge into nothing-to-say it is replaced by that app's `RecordingController`.
+The recorder is the real capture engine vendored from nothing-to-say (`voice/`, Opus over Concentus). Capture, audio focus, and the gesture are not yet device-verified. The ring-manager metadata (uptime, exited state) waits on the v1 control-plane fields (`../specs/control_plane.md`); until then a row shows the label and a static running dot. Adjust currently just dismisses (re-record by pulling the handle again).
 
 ## Why not Termux's TerminalView?
 
@@ -48,7 +46,7 @@ Termux's `TerminalSession` is `final` and hard-wired to a local subprocess, and 
    - Emulator: `TERMINALS_BASE_URL=http://10.0.2.2:8080`
    - Leave `TERMINALS_DEVICE_TOKEN` blank unless the stand-in was started with `-token`.
 3. Build and install: `./gradlew :app:installDebug`.
-4. In the app: open a session from the ☰ menu; it appears in the ring and renders the demo stream. Hold to speak → Send injects `git status`, which echoes on the session's `sent:` line.
+4. In the app: on the manager page, Add new terminal → pick a preset; it appears in the ring and renders the demo stream. Swipe up to speak → Confirm injects `git status` (the stand-in's canned proposal), which echoes on the session's `sent:` line.
 
 ## Notes
 

@@ -13,12 +13,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -39,6 +40,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.humanemagica.nothing.terminal.net.CockpitModel
 import com.humanemagica.nothing.terminal.net.Review
+import com.humanemagica.nothing.terminal.net.Script
+import com.humanemagica.nothing.terminal.net.Session
 import com.humanemagica.nothing.terminal.term.RemoteTerminalView
 import com.humanemagica.nothing.terminal.ui.theme.Cyan
 
@@ -46,9 +49,9 @@ import com.humanemagica.nothing.terminal.ui.theme.Cyan
 fun CockpitScreen() {
     val state by CockpitModel.state.collectAsState()
     when (val s = state) {
-        is CockpitModel.State.Loading -> Centered { Text("Connecting…", color = Color.White) }
+        is CockpitModel.State.Loading -> Centered { Text("Connecting…", color = Cyan.ink) }
         is CockpitModel.State.Failed -> Centered {
-            Text("Failed: ${s.message}", color = Color.White)
+            Text("Failed: ${s.message}", color = Cyan.ink)
             Spacer(Modifier.height(12.dp))
             Button(onClick = { CockpitModel.refresh() }) { Text("Retry") }
         }
@@ -62,59 +65,148 @@ private fun Cockpit() {
     val scripts by CockpitModel.scripts.collectAsState()
     val review by CockpitModel.review.collectAsState()
     val transcribing by CockpitModel.transcribing.collectAsState()
-    val pager = rememberPagerState { ring.size }
-    var menuOpen by remember { mutableStateOf(false) }
-    val currentId = ring.getOrNull(pager.currentPage)?.id
+    val pageCount = ring.size + 1 // page 0 is the manager; terminals follow
+    val pager = rememberPagerState { pageCount }
+    var showSelector by remember { mutableStateOf(false) }
+    val currentId = if (pager.currentPage == 0) null else ring.getOrNull(pager.currentPage - 1)?.id
 
     LaunchedEffect(currentId) { CockpitModel.activeSessionId = currentId }
 
     Box(Modifier.fillMaxSize().background(Cyan.bg)) {
-        if (ring.isEmpty()) {
-            Centered { Text("No open sessions — open one from the menu", color = Color.White) }
-        } else {
-            HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
-                val session = ring[page]
-                key(session.id) {
-                    AndroidView(
-                        factory = { ctx ->
-                            RemoteTerminalView(ctx, CockpitModel.wsUrl(session.id), CockpitModel.token())
-                        },
-                        modifier = Modifier.fillMaxSize(),
-                    )
+        HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
+            if (page == 0) {
+                ManagerPage(
+                    ring = ring,
+                    pageCount = pageCount,
+                    currentPage = pager.currentPage,
+                    onHalt = { CockpitModel.close(it) },
+                    onAdd = { showSelector = true },
+                )
+            } else {
+                ring.getOrNull(page - 1)?.let { session ->
+                    key(session.id) { TerminalPage(session) }
                 }
             }
         }
 
-        // Voice: the slide-up recorder drives the vendored controller; on Send it uploads to
-        // propose, and the transcribe/review overlays below take over (so the handle is idle then).
-        if (currentId != null && !transcribing && review == null) {
+        // Voice: only on a terminal page, and not while an overlay is up.
+        if (currentId != null && !transcribing && review == null && !showSelector) {
             RecorderLayer(CockpitModel.recorder)
         }
 
-        // Top-right menu: close active / open new. (Ring-manager rework is the next step; the
-        // menu stands in for it until then.)
-        Box(Modifier.align(Alignment.TopEnd).padding(4.dp)) {
-            Text("☰", color = Color.White, modifier = Modifier.clickable { menuOpen = true }.padding(12.dp))
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                if (currentId != null) {
-                    DropdownMenuItem(
-                        text = { Text("Close active terminal") },
-                        onClick = { menuOpen = false; CockpitModel.close(currentId) },
-                    )
-                    HorizontalDivider()
-                }
-                Text("Open new", color = Color.Gray, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
-                scripts.forEach { sc ->
-                    DropdownMenuItem(
-                        text = { Text(sc.label) },
-                        onClick = { menuOpen = false; CockpitModel.open(sc.id) },
-                    )
+        if (showSelector) {
+            PresetSelector(
+                scripts = scripts,
+                onPick = { CockpitModel.open(it); showSelector = false },
+                onCancel = { showSelector = false },
+            )
+        }
+        if (transcribing) TranscribingOverlay()
+        review?.let { ReviewOverlay(it) }
+    }
+}
+
+/** A terminal page: a small muted title (with a running dot) over the cell grid. No other chrome. */
+@Composable
+private fun TerminalPage(session: Session) {
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Box(Modifier.size(6.dp).clip(CircleShape).background(Cyan.accent))
+            Text(session.label, color = Cyan.muted, fontSize = 12.sp)
+        }
+        AndroidView(
+            factory = { ctx -> RemoteTerminalView(ctx, CockpitModel.wsUrl(session.id), CockpitModel.token()) },
+            modifier = Modifier.fillMaxWidth().weight(1f),
+        )
+    }
+}
+
+/** The dedicated ring page that lists open terminals, halts each, and opens the preset selector. */
+@Composable
+private fun ManagerPage(
+    ring: List<Session>,
+    pageCount: Int,
+    currentPage: Int,
+    onHalt: (String) -> Unit,
+    onAdd: () -> Unit,
+) {
+    Column(Modifier.fillMaxSize()) {
+        InvertedHeader("OPEN TERMINALS")
+        Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 14.dp)) {
+            if (ring.isEmpty()) {
+                Text("No open sessions", color = Cyan.muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 9.dp))
+            } else {
+                // started_at / state metadata is a v1 control-plane addition (specs/control_plane.md);
+                // until the backend returns it, the dot is a static "running" marker and there is no age.
+                ring.forEach { s ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(Cyan.accent))
+                        Text(s.label, color = Cyan.ink, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                        Box(
+                            Modifier.border(1.dp, Cyan.muted).clickable { onHalt(s.id) }
+                                .padding(horizontal = 12.dp, vertical = 5.dp),
+                        ) { Text("Halt", color = Cyan.muted, fontSize = 12.sp) }
+                    }
+                    HorizontalDivider(color = Cyan.rule)
                 }
             }
         }
+        Box(
+            Modifier.fillMaxWidth().padding(14.dp).border(1.dp, Cyan.accent).clickable { onAdd() }
+                .padding(vertical = 11.dp),
+            contentAlignment = Alignment.Center,
+        ) { Text("+ Add new terminal", color = Cyan.accent, fontSize = 15.sp) }
+        RingDots(pageCount, currentPage)
+    }
+}
 
-        if (transcribing) TranscribingOverlay()
-        review?.let { ReviewOverlay(it) }
+/** The preset selector: a separate full screen. Pick a preset → open a panel in the ring. */
+@Composable
+private fun PresetSelector(scripts: List<Script>, onPick: (String) -> Unit, onCancel: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(Cyan.bg)) {
+        Column(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxWidth().background(Cyan.accent).padding(horizontal = 14.dp, vertical = 9.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Add terminal", color = Cyan.bg, fontSize = 13.sp)
+                    Text("Cancel ✕", color = Cyan.bg.copy(alpha = 0.7f), fontSize = 12.sp, modifier = Modifier.clickable { onCancel() })
+                }
+            }
+            Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 14.dp)) {
+                scripts.forEach { sc ->
+                    Column(Modifier.fillMaxWidth().clickable { onPick(sc.id) }.padding(vertical = 9.dp)) {
+                        Text(sc.label, color = Cyan.accent, fontSize = 13.sp)
+                    }
+                    HorizontalDivider(color = Cyan.rule)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InvertedHeader(text: String) {
+    Box(Modifier.fillMaxWidth().background(Cyan.accent).padding(horizontal = 14.dp, vertical = 9.dp)) {
+        Text(text, color = Cyan.bg, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun RingDots(count: Int, current: Int) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.CenterHorizontally),
+    ) {
+        repeat(count) { i ->
+            Box(Modifier.size(6.dp).clip(CircleShape).background(if (i == current) Cyan.accent else Cyan.faint))
+        }
     }
 }
 
@@ -137,43 +229,26 @@ private fun ReviewOverlay(r: Review) {
                 onValueChange = { edited = it },
                 textStyle = TextStyle(color = Cyan.ink, fontSize = 14.sp),
                 cursorBrush = SolidColor(Cyan.accent),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .background(Cyan.accentSoft)
-                    .padding(16.dp),
+                modifier = Modifier.fillMaxWidth().weight(1f).background(Cyan.accentSoft).padding(16.dp),
             )
-            Row(
-                Modifier.fillMaxWidth().padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
+            Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ReviewButton("Cancel", Cyan.danger, Modifier.weight(1f)) { CockpitModel.cancelReview() }
                 ReviewButton("Adjust", Cyan.accent, Modifier.weight(1f)) { CockpitModel.cancelReview() }
-                ReviewButton("Confirm", Cyan.bg, Modifier.weight(1f), fill = Cyan.accent) {
-                    CockpitModel.confirm(edited)
-                }
+                ReviewButton("Confirm", Cyan.bg, Modifier.weight(1f), fill = Cyan.accent) { CockpitModel.confirm(edited) }
             }
         }
     }
 }
 
 @Composable
-private fun ReviewButton(
-    label: String,
-    color: Color,
-    modifier: Modifier,
-    fill: Color? = null,
-    onClick: () -> Unit,
-) {
+private fun ReviewButton(label: String, color: Color, modifier: Modifier, fill: Color? = null, onClick: () -> Unit) {
     Box(
         modifier
             .then(if (fill != null) Modifier.background(fill) else Modifier.border(1.dp, color))
             .clickable { onClick() }
             .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center,
-    ) {
-        Text(label, color = color, fontSize = 15.sp)
-    }
+    ) { Text(label, color = color, fontSize = 15.sp) }
 }
 
 @Composable
