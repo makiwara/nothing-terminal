@@ -42,4 +42,6 @@ Divergence boundary: the cockpit's differences live entirely in code we own — 
 
 The engine is vendored: `voice/` (the four files above) repackaged to `…terminal.voice` with provenance headers, plus the `core/` shims, the `RECORD_AUDIO` permission, and the Concentus dependency (`io.github.jaredmdobson:concentus:1.0.2`, Maven Central). `:app:compileDebugKotlin` and `:app:lintDebug` are green. Capture itself (mic, audio focus, OGG/Opus output) is unverified — it needs a real device.
 
-Next: build the native landscape surface against the vendored controller, wire the `onSend` sink to `POST …/voice` (propose), and add the after-send transcribe/review flow that calls `POST …/send` on Confirm. The engine is not yet wired into the UI; `CockpitScreen` still uses the stub recorder. No sibling was touched; the recorder is read-only context.
+The voice flow is now wired on top of the engine: tokens copied (`ui/theme/Palette.kt`), `CockpitModel` drives the controller (`onSend` → propose, then a transcribe flag and `confirm` → send), a native landscape surface (`shell/RecorderLayer.kt`) renders the inverted two-block capture, and `CockpitScreen` hosts it plus the transcribe/review overlay (Cancel/Adjust/Confirm, editable transcript). compile + lint green; the surface choreography is a first cut and gesture feel + capture remain device-unverified. No sibling was touched; the recorder is read-only context.
+
+Next: the ring rework — replace the ☰ menu with the manager page, add the preset selector and the inverted headers, per `specs/ui/ring.md`.

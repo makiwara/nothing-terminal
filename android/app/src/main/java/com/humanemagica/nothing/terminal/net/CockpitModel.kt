@@ -1,20 +1,24 @@
 package com.humanemagica.nothing.terminal.net
 
+import android.content.Context
+import com.humanemagica.nothing.terminal.voice.RecordingController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
-/** Voice proposal under review (the Cancel / Adjust / Send overlay). */
+/** Voice proposal under review (the Cancel / Adjust / Confirm overlay). */
 data class Review(val sessionId: String, val transcript: String, val action: Action?)
 
 /**
- * The control-plane singleton: holds the session ring, the script catalog, and
- * the voice review state, talking to the backend over [ControlApi]. The data
- * plane (per-session byte streams) is owned by each terminal view's own
- * [SessionConnection]; this model never touches bytes.
+ * The control-plane singleton: holds the session ring, the script catalog, the recorder, and
+ * the voice review state, talking to the backend over [ControlApi]. The data plane (per-session
+ * byte streams) is owned by each terminal view's own [SessionConnection]; this model never
+ * touches bytes.
  */
 object CockpitModel {
 
@@ -29,6 +33,13 @@ object CockpitModel {
     private var wsBase: String = ""
     private var token: String = ""
 
+    /** The recorder targets whichever terminal is currently visible in the ring. */
+    var activeSessionId: String? = null
+
+    /** The reused capture engine (vendored from nothing-to-say). On Send it hands us the OGG. */
+    lateinit var recorder: RecordingController
+        private set
+
     private val _state = MutableStateFlow<State>(State.Loading)
     val state: StateFlow<State> = _state
     private val _ring = MutableStateFlow<List<Session>>(emptyList())
@@ -37,11 +48,17 @@ object CockpitModel {
     val scripts: StateFlow<List<Script>> = _scripts
     private val _review = MutableStateFlow<Review?>(null)
     val review: StateFlow<Review?> = _review
+    private val _transcribing = MutableStateFlow(false)
+    val transcribing: StateFlow<Boolean> = _transcribing
 
-    fun start(baseUrl: String, token: String) {
+    fun start(context: Context, baseUrl: String, token: String) {
         this.token = token
         this.wsBase = baseUrl.replaceFirst("http", "ws").trimEnd('/')
         api = ControlApi(baseUrl, token)
+        recorder = RecordingController(context.applicationContext, scope, ::onCaptured).apply {
+            mountAt = 0.33f
+            unlockAt = 0.33f
+        }
         refresh()
     }
 
@@ -77,21 +94,32 @@ object CockpitModel {
         }
     }
 
-    /** Propose step: upload the recorded audio, surface the proposal for review. */
-    fun propose(sessionId: String, audio: ByteArray?) = scope.launch {
+    /** Recorder sink: upload the captured OGG to propose (side-effect-free), surface the proposal
+     *  for review, then drop the file. Runs on the recorder's IO coroutine. */
+    private suspend fun onCaptured(path: String, durationSec: Int) {
+        val sid = activeSessionId ?: run { File(path).delete(); return }
+        _transcribing.value = true
         try {
-            val p = api.voice(sessionId, audio)
-            _review.value = Review(sessionId, p.transcript, p.action)
+            val audio = withContext(Dispatchers.IO) { File(path).readBytes() }
+            val p = api.voice(sid, audio)
+            _review.value = Review(sid, p.transcript, p.action)
         } catch (e: Exception) {
-            _review.value = Review(sessionId, "voice failed: ${e.message}", null)
+            _review.value = Review(sid, "voice failed: ${e.message}", null)
+        } finally {
+            _transcribing.value = false
+            withContext(Dispatchers.IO) { File(path).delete() }
         }
     }
 
-    fun sendReviewed() {
+    /** Confirm: inject the reviewed command (the possibly-edited text, or the proposed signal). */
+    fun confirm(editedText: String) {
         val r = _review.value ?: return
         _review.value = null
-        val a = r.action ?: return
-        scope.launch { try { api.send(r.sessionId, a) } catch (_: Exception) {} }
+        val action = when (val a = r.action) {
+            is Action.Signal -> a
+            else -> Action.Text(editedText)
+        }
+        scope.launch { try { api.send(r.sessionId, action) } catch (_: Exception) {} }
     }
 
     fun cancelReview() {

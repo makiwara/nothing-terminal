@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import com.humanemagica.nothing.terminal.BuildConfig
 import com.humanemagica.nothing.terminal.net.CockpitModel
 
@@ -16,8 +17,9 @@ import com.humanemagica.nothing.terminal.net.CockpitModel
  */
 @Composable
 fun AppRoot() {
+    val context = LocalContext.current
     LaunchedEffect(Unit) {
-        CockpitModel.start(BuildConfig.TERMINALS_BASE_URL, BuildConfig.TERMINALS_DEVICE_TOKEN)
+        CockpitModel.start(context, BuildConfig.TERMINALS_BASE_URL, BuildConfig.TERMINALS_DEVICE_TOKEN)
     }
     Surface(Modifier.fillMaxSize(), color = Color.Black) {
         CockpitScreen()
