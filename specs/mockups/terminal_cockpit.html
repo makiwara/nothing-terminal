@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>nothing-terminal — cockpit surfaces</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<!--
+  The ring's structural surfaces. Landscape, voice-only.
+
+  A terminal page is just the cell grid plus a small muted title — no menu, no
+  toolbar. All management lives on one dedicated ring page (the manager), so the
+  terminals stay chrome-free. "Add new" there opens the preset picker as its own
+  full screen. The faint bottom bar is the shared swipe-up-to-speak handle.
+-->
+<body>
+
+<div class="section">Ring · structural surfaces</div>
+
+<!-- 1 · a terminal page (idle) -->
+<div class="mockup">
+  <div class="phone-frame"><div class="phone">
+    <div class="term">
+      <div class="term-title"><span class="run">●</span> build · web</div>
+      <div class="term-body"><span class="line"><span class="path">~/proj</span> <span class="prompt">$</span> npm run build</span><span class="line"><span class="ok">  ✓</span> compiled in 4.2s</span><span class="line"><span class="dim">  ● watching for changes…</span></span><span class="line"> </span><span class="line"><span class="path">~/proj</span> <span class="prompt">$</span> <span class="cursor"> </span></span></div>
+    </div>
+    <div class="speak-handle"><span class="bar"></span></div>
+  </div></div>
+  <div class="label"><b>1 · terminal (idle)</b><span class="sub">small title only · swipe ◀▶ ring · drag ▲▼ scrollback</span></div>
+</div>
+
+<!-- 2 · a full-screen TUI page (htop-class) -->
+<div class="mockup">
+  <div class="phone-frame"><div class="phone">
+    <div class="term">
+      <div class="term-title"><span class="run">●</span> htop</div>
+      <div class="term-body"><span class="line"><span class="ok">  1</span> [|||||<span class="dim">||      </span>] 41%   <span class="ok">5</span> [|||<span class="dim">        </span>] 22%</span><span class="line"><span class="ok">  2</span> [||<span class="dim">         </span>]  9%   <span class="ok">6</span> [||||||<span class="dim">|    </span>] 55%</span><span class="line"><span class="dim">  Mem</span>[||||||<span class="dim">     </span>] 3.1G/8G</span><span class="line"> </span><span class="line"><span class="dim">  PID USER   CPU%  COMMAND</span></span><span class="line">  912 nick    7.4  node build</span><span class="line">  118 nick    2.1  htop<span class="cursor"> </span></span></div>
+    </div>
+    <div class="speak-handle"><span class="bar"></span></div>
+  </div></div>
+  <div class="label"><b>2 · terminal (alt-screen TUI)</b><span class="sub">one real VT emulator renders both kinds</span></div>
+</div>
+
+<!-- 3 · the manager page in the ring -->
+<div class="mockup">
+  <div class="phone-frame"><div class="phone">
+    <div class="manager">
+      <div class="mgr-head">Open terminals</div>
+      <div class="mgr-row"><span class="live"></span><span class="mgr-name">build · web</span><span class="mgr-meta">4m</span><span class="halt">Halt</span></div>
+      <div class="mgr-row"><span class="live"></span><span class="mgr-name">htop</span><span class="mgr-meta">12m</span><span class="halt">Halt</span></div>
+      <div class="mgr-row"><span class="live"></span><span class="mgr-name">system logs</span><span class="mgr-meta">1h</span><span class="halt">Halt</span></div>
+      <div class="mgr-add">+ Add new terminal</div>
+    </div>
+    <div class="ring-dots"><span class="d on"></span><span class="d"></span><span class="d"></span><span class="d"></span></div>
+  </div></div>
+  <div class="label"><b>3 · ring manager</b><span class="sub">a dedicated ring page · halt each · add new</span></div>
+</div>
+
+<div class="section">Add a terminal — pick a preset (from “Add new”)</div>
+
+<!-- 4 · preset selector (separate screen, from Add new) -->
+<div class="mockup">
+  <div class="phone-frame"><div class="phone">
+    <div class="preset-screen">
+      <div class="ps-head"><span class="ps-title">Add terminal</span><span class="ps-cancel">Cancel ✕</span></div>
+      <div class="preset-row"><span class="pr-name">System logs</span><span class="pr-cmd">journalctl -fu home</span></div>
+      <div class="preset-row"><span class="pr-name">Build · web</span><span class="pr-cmd">npm run build --watch</span></div>
+      <div class="preset-row"><span class="pr-name">htop</span><span class="pr-cmd">htop</span></div>
+      <div class="preset-row"><span class="pr-name">Shell</span><span class="pr-cmd">bash -l</span></div>
+    </div>
+  </div></div>
+  <div class="label"><b>4 · preset selector</b><span class="sub">pick a preset → POST /sessions → adds a panel to the ring</span></div>
+</div>
+
+<!-- 5 · empty ring -->
+<div class="mockup">
+  <div class="phone-frame"><div class="phone">
+    <div class="manager">
+      <div class="mgr-head">Open terminals</div>
+      <div class="mgr-row" style="border:none;color:var(--muted);font-size:var(--fs-xs)">No open sessions</div>
+      <div class="mgr-add">+ Add new terminal</div>
+    </div>
+    <div class="ring-dots"><span class="d on"></span></div>
+  </div></div>
+  <div class="label"><b>5 · empty ring</b><span class="sub">only the manager page; open one to begin</span></div>
+</div>
+
+</body>
+</html>

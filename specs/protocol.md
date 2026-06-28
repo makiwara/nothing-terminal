@@ -10,6 +10,8 @@ the PTY master byte stream is the ground truth and is forwarded verbatim into a
 real terminal emulator. Bytes are the *data plane*; JSON is a thin *control
 plane* for things bytes can't carry (size).
 
+This document covers only the per-session stream. The REST control plane — the script catalog, the session ring, and the voice propose/send flow — is specified in `control_plane.md`.
+
 ## Connect
 
 ```

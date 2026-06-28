@@ -1,0 +1,355 @@
+/*
+ * nothing-terminal — shared mockup styles.
+ *
+ * Landscape voice-driven terminal cockpit. Borrows nothing-to-say's design
+ * system unchanged — one theme (Pitch Cyan), one font (PT Mono 14 / 1.55), the
+ * same .phone-frame / .mockup / .label scaffolding, and the same .rec-surface
+ * pull-to-unwrap recording classes — so the cockpit reads as the same app.
+ *
+ * The only deliberate departure is orientation: the frame is the target device
+ * rotated to landscape (427×240 dp, their 240×427 on its side). Terminals want
+ * width; the chat app is portrait. Everything else is shared tokens.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=PT+Mono&display=swap');
+
+:root {
+  /* Pitch Cyan palette — identical to nothing-to-say's MockupScreen.kt */
+  --bg: #000000;
+  --edge: #1a2a2c;
+  --ink: #d0e8eb;
+  --muted: #5a7376;
+  --faint: #2d3d40;
+  --rule: #0e1a1c;
+  --accent: #5dd5e0;
+  --accent-soft: #0a2426;
+  --danger: #b68cff;        /* destructive / cancel — nothing-to-say's `danger` token */
+  --accent-panel: #2f6a70;  /* translucent panel fill (held hands-free area) */
+  --accent-lock: #194044;   /* accentSoft over the panel (locked hands-free area) */
+
+  /* Typography */
+  --mono: 'PT Mono', 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+  --fs:    14px;
+  --fs-s:  13px;
+  --fs-xs: 12px;
+  --fs-btn: 15px;
+  --lh: 1.55;
+
+  /* Phone frame — target device dp grid, rotated to landscape */
+  --zoom: 0.85;
+  --phone-w: 427px;
+  --phone-h: 240px;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+
+body {
+  padding: 40px 20px;
+  background: #d8d4cc;
+  font-family: var(--mono);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 32px;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+/* ---- Mockup wrapper ---- */
+
+.mockup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: calc(var(--phone-w) * var(--zoom));
+}
+.phone-frame {
+  width: calc(var(--phone-w) * var(--zoom));
+  height: calc(var(--phone-h) * var(--zoom));
+  overflow: hidden;
+}
+.phone {
+  width: var(--phone-w);
+  height: var(--phone-h);
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  font-size: var(--fs);
+  line-height: var(--lh);
+  transform: scale(var(--zoom));
+  transform-origin: top left;
+  position: relative;
+}
+.label {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  color: #333;
+  text-align: center;
+}
+.label b { font-weight: 600; }
+.label .sub { color: #666; }
+.section {
+  width: 100%;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  color: #222;
+  font-weight: 600;
+  border-bottom: 1px solid #b9b4a8;
+  padding-bottom: 4px;
+  margin: 8px 4px 0;
+}
+
+/* ---- Terminal surface ---- */
+/* Terminals carry no chrome but a small muted title; the live cell grid is
+   everything else. Faint bottom handle is the shared swipe-up-to-speak
+   affordance, not terminal UI. */
+
+.term {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.term-title {
+  padding: 6px 12px;
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.02em;
+}
+.term-title .run { color: var(--accent); }
+.term-body {
+  flex: 1;
+  padding: 4px 12px 0;
+  overflow: hidden;
+  white-space: pre;
+}
+.term-body .line { display: block; }
+.prompt { color: var(--accent); }
+.path { color: var(--muted); }
+.dim { color: var(--muted); }
+.ok { color: var(--accent); }
+.cursor {
+  background: var(--ink);
+  color: var(--bg);
+  animation: blink 1.1s step-end infinite;
+}
+@keyframes blink { 0%,50% { opacity: 1; } 50.01%,100% { opacity: 0; } }
+
+/* Shared swipe-up handle (bottom center). */
+.speak-handle {
+  padding: 9px 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.speak-handle .bar { width: 56px; height: 3px; background: var(--accent); opacity: 0.5; }
+
+/* ---- Ring manager panel (a dedicated page in the ring) ---- */
+
+.manager {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0 14px;
+  overflow: hidden;
+}
+/* Inverted header: full-bleed accent bar with black text, echoing the capture
+   surface's inversion. */
+.manager .mgr-head {
+  margin: 0 -14px 10px;
+  padding: 9px 14px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.mgr-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.mgr-row .live { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: 0 0 8px; }
+.mgr-row .live.exited { background: var(--faint); }
+.mgr-row .mgr-name { flex: 1; color: var(--ink); font-size: var(--fs-s); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.mgr-row .mgr-meta { color: var(--muted); font-size: var(--fs-xs); }
+.mgr-row .halt {
+  border: 1px solid var(--muted);
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  padding: 5px 12px;
+  letter-spacing: 0.04em;
+}
+.mgr-add {
+  margin-top: auto;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  padding: 11px 10px;
+  text-align: center;
+  font-size: var(--fs-btn);
+  margin-bottom: 12px;
+}
+
+/* Ring position dots. */
+.ring-dots { display: flex; justify-content: center; gap: 7px; padding: 8px 0 10px; }
+.ring-dots .d { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
+.ring-dots .d.on { background: var(--accent); }
+
+/* ---- Preset picker (separate full screen) ---- */
+
+.preset-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0 14px 12px;
+  overflow: hidden;
+}
+/* Inverted header, matching the ring manager. */
+.preset-screen .ps-head {
+  margin: 0 -14px 8px;
+  padding: 9px 14px;
+  background: var(--accent);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.preset-screen .ps-title { color: var(--bg); font-size: var(--fs-s); }
+.preset-screen .ps-cancel { color: var(--bg); opacity: 0.7; font-size: var(--fs-xs); }
+.preset-row {
+  display: flex;
+  flex-direction: column;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.preset-row .pr-name { color: var(--accent); font-size: var(--fs-s); }
+.preset-row .pr-cmd { color: var(--muted); font-size: var(--fs-xs); }
+
+/* ---- Recording surface — models nothing-to-say's RecordingSurface.kt ----
+   A top-pinned block (status + waveform, ~a third of the height) over a
+   hands-free area. Inverted palette: solid accent fill, black (bg) content.
+   Two button strips enter from opposite ends — Locked rises from below the
+   block, Options drops from the top — so the active gesture windows are short
+   (reveal 0.50→0.25, lock 0.25→0, options 0.50→0.75), not a full-screen drag.
+   Static dot + animated waveform match the source, not its recording.html mock. */
+
+.behind { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.rec-surface {
+  position: absolute; inset: 0; background: var(--bg);
+  display: flex; flex-direction: column;
+}
+
+/* Top block: status row + waveform, on the bright accent fill. */
+.rec-block {
+  flex: 0 0 84px;
+  background: var(--accent);
+  display: flex; flex-direction: column;
+  border-top: 1px solid var(--bg);
+}
+/* Hands-free area below the block: translucent panel when held, darkened when locked. */
+.rec-free { flex: 1; background: var(--accent-panel); }
+.rec-surface.locked .rec-free { background: var(--accent-lock); }
+
+.rec-top { padding: 10px 14px; display: flex; align-items: center; gap: 10px; }
+.rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bg); }
+.rec-time { color: var(--bg); font-size: var(--fs-s); }
+.rec-status { flex: 1; color: var(--bg); opacity: 0.65; font-size: var(--fs-xs); }
+
+/* Button strip — black on the bright accent. Locked rises from below the block;
+   Options drops from the top (DOM order in the cards conveys the direction). */
+.rec-buttons { display: flex; gap: 8px; padding: 9px 14px; background: var(--accent); }
+.rec-btn {
+  flex: 1; border: 1px solid var(--bg); color: var(--bg);
+  padding: 11px 10px; font-size: var(--fs-btn); text-align: center;
+}
+.rec-btn.active { background: var(--bg); color: var(--accent); }
+
+/* Waveform — black bars on accent, animated (the source's live wiggle; per-bar
+   phase set inline via animation-delay). */
+.wave { flex: 1; display: flex; align-items: center; justify-content: center; gap: 3px; padding: 6px 14px; }
+.wave i {
+  display: block; width: 4px; height: 22px; border-radius: 2px;
+  background: var(--bg); opacity: 0.85; transform-origin: center;
+  animation: wavebar 0.9s linear infinite;
+}
+@keyframes wavebar { 0%,100% { transform: scaleY(0.45); } 50% { transform: scaleY(1); } }
+
+/* Mount/lock flash — a brief ink wash, used only on the animated demo cards. */
+.flash { position: absolute; inset: 0; background: var(--ink); pointer-events: none; }
+
+/* ---- Review surface (the divergence: replaces the recorder after send) ----
+   On send the recording surface does NOT dismiss. It pulsates while the brain
+   transcribes, then the same surface becomes the transcript panel: proposed
+   command up top (tap = soft keyboard), Cancel / Adjust / Confirm below.
+   Adjust slides the recorder back up; Confirm injects text + Enter. */
+
+/* After-send transcribing: a quiet, non-inverted block — dark surface, accent
+   content — gently breathing. Much lighter than the live (inverted) capture
+   block, since nothing is being captured; the phone is just waiting on the brain. */
+.rec-surface.processing { background: var(--accent-soft); }
+.rec-surface.processing .rec-free { background: transparent; }
+.rec-block.calm {
+  background: transparent; border-top-color: var(--rule);
+  animation: calmpulse 1.7s ease-in-out infinite;
+}
+.rec-block.calm .rec-dot { background: var(--accent); }
+.rec-block.calm .rec-time { color: var(--accent); }
+.rec-block.calm .rec-status { color: var(--muted); opacity: 1; }
+.rec-block.calm .wave i { background: var(--accent); opacity: 0.35; animation: none; }
+@keyframes calmpulse { 0%,100% { opacity: 1; } 50% { opacity: 0.62; } }
+
+.review-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* The transcript is editable content: a filled block (no border) that spans the
+   surface signals "tap to edit". Tapping it raises the system keyboard. */
+.transcript {
+  flex: 1;
+  background: var(--accent-soft);
+  color: var(--ink);
+  padding: 16px 18px;
+  font-size: var(--fs);
+}
+.transcript .caret {
+  display: inline-block; width: 2px; height: 1.1em; vertical-align: text-bottom;
+  background: var(--accent); margin-left: 1px; animation: blink 1.1s step-end infinite;
+}
+.review-btns { display: flex; gap: 8px; padding: 8px 16px 14px; }
+.review-btn {
+  flex: 1; border: 1px solid var(--accent); color: var(--accent);
+  padding: 12px 8px; font-size: var(--fs-btn); text-align: center;
+}
+.review-btn.cancel { border-color: var(--danger); color: var(--danger); }
+.review-btn.confirm { background: var(--accent); color: var(--bg); }
+
+/* ---- Soft keyboard (only surface that raises one; tap-transcript to edit) ---- */
+
+.kbd {
+  background: #0c1416;
+  border-top: 1px solid var(--rule);
+  padding: 6px 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.kbd .krow { display: flex; gap: 5px; justify-content: center; }
+.kbd .key {
+  flex: 1;
+  background: #14211f;
+  color: var(--ink);
+  border-radius: 4px;
+  text-align: center;
+  font-size: var(--fs-xs);
+  padding: 7px 0;
+}
+.kbd .key.wide { flex: 2.4; }
+.kbd .key.go { color: var(--bg); background: var(--accent); }

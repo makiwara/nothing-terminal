@@ -22,6 +22,8 @@ com.humanemagica.nothing.terminal
 
 ## The cockpit
 
+The shipped prototype is described below. The target UI — a landscape ring with a manager page instead of a menu, a two-stage voice review, and inverted capture/management surfaces — is specced in [`../specs/ui/`](../specs/ui/README.md) with mockups in `../specs/mockups/`. Aligning the prototype to it is the pending rework, so this section still reflects the older behaviour.
+
 Landscape, full-screen terminal, voice-only — no keyboard.
 
 - Swipe horizontally to move through the ring of open sessions.

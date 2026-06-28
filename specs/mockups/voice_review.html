@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>nothing-terminal — voice input + review</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* Demo-only transitions (kept local to this file). */
+
+  /* Compressed arm → mount: the block fades in at the top while the hands-free
+     panel rises from the bottom to meet it; brief ink flash at the mount line.
+     This is the short reveal window (0.50→0.25), not a full-screen unwrap. */
+  .rec-surface.demo-mount { background: transparent; }
+  .demo-mount .rec-block { animation: blockfade 3s ease-in-out infinite; }
+  .demo-mount .rec-free  { animation: panelrise 3s ease-in-out infinite; }
+  .demo-mount .flash     { animation: flashin 3s ease-in-out infinite; opacity: 0; }
+  @keyframes blockfade { 0%,28% { opacity: 0; } 58%,100% { opacity: 1; } }
+  @keyframes panelrise { 0%,22% { transform: translateY(100%); } 58%,100% { transform: translateY(0); } }
+  @keyframes flashin   { 0%,54% { opacity: 0; } 62% { opacity: 0.5; } 76%,100% { opacity: 0; } }
+
+  /* Lock: Cancel/Send rise from below the block; hands-free area darkens; flash. */
+  .demo-lock .rec-buttons { animation: btnrise 3s ease-in-out infinite; }
+  .demo-lock .rec-free    { animation: darken 3s ease-in-out infinite; }
+  .demo-lock .flash       { animation: flashlock 3s ease-in-out infinite; opacity: 0; }
+  @keyframes btnrise   { 0%,30% { transform: translateY(150%); opacity: 0; } 56%,100% { transform: translateY(0); opacity: 1; } }
+  @keyframes darken    { 0%,30% { background: #2f6a70; } 60%,100% { background: #194044; } }
+  @keyframes flashlock { 0%,42% { opacity: 0; } 52% { opacity: 0.5; } 66%,100% { opacity: 0; } }
+
+  /* Send → review: the capture block pulsates, then the surface becomes the
+     transcript panel. */
+  .demo-rev .m-cap { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--accent-soft); animation: capout 3.4s ease-in-out infinite; }
+  .demo-rev .m-cap .rec-free { background: transparent; }
+  .demo-rev .m-rev { position: absolute; inset: 0; display: flex; flex-direction: column; animation: revin 3.4s ease-in-out infinite; opacity: 0; }
+  @keyframes capout { 0% { opacity: 1; } 35% { opacity: 0.5; } 45% { opacity: 1; } 55%,100% { opacity: 0; } }
+  @keyframes revin  { 0%,58% { opacity: 0; } 72%,100% { opacity: 1; } }
+</style>
+</head>
+<!--
+  Voice input. The recorder is nothing-to-say's: a top-pinned block (status +
+  waveform) over a hands-free area, inverted palette (solid accent, black
+  content). Two button strips meet the finger from opposite ends — Locked rises
+  from below the block, Options drops from the top — so the active gesture
+  windows are short, not a full-screen drag.
+
+  What differs from the chat app is AFTER send: the surface does not dismiss. It
+  pulsates while the brain transcribes, then the same surface becomes the
+  transcript panel — proposed command + Cancel / Adjust / Confirm. Adjust slides
+  the recorder back up; Confirm injects text + Enter; tapping the transcript
+  raises the system keyboard. Nothing reaches the PTY until Confirm.
+-->
+<body>
+
+<div class="section">Voice input — top block + hands-free area; buttons meet from both ends</div>
+
+<!-- 1 · default rest: live terminal + the speak-handle lip you pull up -->
+<div class="mockup">
+  <div class="phone-frame"><div class="phone">
+    <div class="term">
+      <div class="term-title"><span class="run">●</span> build · web</div>
+      <div class="term-body"><span class="line"><span class="path">~/proj</span> <span class="prompt">$</span> npm run build</span><span class="line"><span class="ok">  ✓</span> compiled in 4.2s</span><span class="line"><span class="dim">  ● watching for changes…</span></span><span class="line"> </span><span class="line"><span class="path">~/proj</span> <span class="prompt">$</span> <span class="cursor"> </span></span></div>
+    </div>
+    <div class="speak-handle"><span class="bar"></span></div>
+  </div></div>
+  <div class="label"><b>1 · default (rest)</b><span class="sub">speak-handle lip; pull up to record</span></div>
+</div>
+
+<!-- 2 · recording (held) -->
+<div class="mockup">
+  <div class="phone-frame"><div class="phone">
+    <div class="rec-surface">
+      <div class="rec-block">
+        <div class="rec-top"><span class="rec-dot"></span><span class="rec-time">0:04</span><span class="rec-status"></span></div>
+        <div class="wave"><i style="height:14px;animation-delay:-0.00s"></i><i style="height:26px;animation-delay:-0.08s"></i><i style="height:18px;animation-delay:-0.16s"></i><i style="height:30px;animation-delay:-0.24s"></i><i style="height:14px;animation-delay:-0.32s"></i><i style="height:24px;animation-delay:-0.40s"></i><i style="height:16px;animation-delay:-0.48s"></i><i style="height:28px;animation-delay:-0.56s"></i><i style="height:20px;animation-delay:-0.64s"></i><i style="height:26px;animation-delay:-0.72s"></i><i style="height:18px;animation-delay:-0.80s"></i><i style="height:24px;animation-delay:-0.88s"></i></div>
+      </div>
+      <div class="rec-free"></div>
+    </div>
+  </div></div>
+  <div class="label"><b>2 · recording (held)</b><span class="sub">block pinned at top; hands-free area below; release sends</span></div>
+</div>
+
+<!-- 3 · locked: buttons rise from below the block -->
+<div class="mockup">
+  <div class="phone-frame"><div class="phone">
+    <div class="rec-surface locked">
+      <div class="rec-block">
+        <div class="rec-top"><span class="rec-dot"></span><span class="rec-time">0:11</span><span class="rec-status"></span></div>
+        <div class="wave"><i style="height:14px;animation-delay:-0.00s"></i><i style="height:26px;animation-delay:-0.08s"></i><i style="height:18px;animation-delay:-0.16s"></i><i style="height:30px;animation-delay:-0.24s"></i><i style="height:14px;animation-delay:-0.32s"></i><i style="height:24px;animation-delay:-0.40s"></i><i style="height:16px;animation-delay:-0.48s"></i><i style="height:28px;animation-delay:-0.56s"></i><i style="height:20px;animation-delay:-0.64s"></i><i style="height:26px;animation-delay:-0.72s"></i></div>
+      </div>
+      <div class="rec-buttons"><span class="rec-btn">Cancel</span><span class="rec-btn">Send</span></div>
+      <div class="rec-free"></div>
+    </div>
+  </div></div>
+  <div class="label"><b>3 · locked</b><span class="sub">pulled to top; Cancel/Send rise from below the block; area darkens</span></div>
+</div>
+
+<!-- 4 · options: buttons drop from the top -->
+<div class="mockup">
+  <div class="phone-frame"><div class="phone">
+    <div class="rec-surface">
+      <div class="rec-buttons"><span class="rec-btn">Cancel</span><span class="rec-btn">Send</span></div>
+      <div class="rec-block">
+        <div class="rec-top"><span class="rec-dot"></span><span class="rec-time">0:09</span><span class="rec-status"></span></div>
+        <div class="wave"><i style="height:14px;animation-delay:-0.00s"></i><i style="height:26px;animation-delay:-0.08s"></i><i style="height:18px;animation-delay:-0.16s"></i><i style="height:30px;animation-delay:-0.24s"></i><i style="height:14px;animation-delay:-0.32s"></i><i style="height:24px;animation-delay:-0.40s"></i><i style="height:16px;animation-delay:-0.48s"></i><i style="height:28px;animation-delay:-0.56s"></i><i style="height:20px;animation-delay:-0.64s"></i><i style="height:26px;animation-delay:-0.72s"></i></div>
+      </div>
+      <div class="rec-free"></div>
+    </div>
+  </div></div>
+  <div class="label"><b>4 · options</b><span class="sub">pulled back down; Cancel/Send drop in from the top</span></div>
+</div>
+
+<div class="section">After send — pulsate → transcript review</div>
+
+<!-- 5 · transcribing (pulsate) -->
+<div class="mockup">
+  <div class="phone-frame"><div class="phone">
+    <div class="rec-surface processing">
+      <div class="rec-block calm">
+        <div class="rec-top"><span class="rec-dot"></span><span class="rec-time">0:11</span><span class="rec-status">transcribing…</span></div>
+        <div class="wave"><i style="height:18px;animation-delay:-0.00s"></i><i style="height:18px;animation-delay:-0.12s"></i><i style="height:18px;animation-delay:-0.24s"></i><i style="height:18px;animation-delay:-0.36s"></i><i style="height:18px;animation-delay:-0.48s"></i><i style="height:18px;animation-delay:-0.60s"></i><i style="height:18px;animation-delay:-0.72s"></i></div>
+      </div>
+      <div class="rec-free"></div>
+    </div>
+  </div></div>
+  <div class="label"><b>5 · transcribing</b><span class="sub">quiet non-inverted block, gently breathing; no dismiss</span></div>
+</div>
+
+<!-- 6 · transcript review -->
+<div class="mockup">
+  <div class="phone-frame"><div class="phone">
+    <div class="rec-surface locked">
+      <div class="review-body">
+        <div class="transcript">git status</div>
+      </div>
+      <div class="review-btns"><span class="review-btn cancel">Cancel</span><span class="review-btn">Adjust</span><span class="review-btn confirm">Confirm</span></div>
+    </div>
+  </div></div>
+  <div class="label"><b>6 · review</b><span class="sub">tap transcript = keyboard · Adjust = re-record · Confirm = inject</span></div>
+</div>
+
+<!-- 7 · transcript edit (system keyboard, no buttons) -->
+<div class="mockup">
+  <div class="phone-frame"><div class="phone">
+    <div class="rec-surface locked">
+      <div class="review-body">
+        <div class="transcript">git status<span class="caret"></span></div>
+      </div>
+      <div class="kbd">
+        <div class="krow"><span class="key">q</span><span class="key">w</span><span class="key">e</span><span class="key">r</span><span class="key">t</span><span class="key">y</span><span class="key">u</span><span class="key">i</span><span class="key">o</span><span class="key">p</span></div>
+        <div class="krow"><span class="key">a</span><span class="key">s</span><span class="key">d</span><span class="key">f</span><span class="key">g</span><span class="key">h</span><span class="key">j</span><span class="key">k</span><span class="key">l</span></div>
+        <div class="krow"><span class="key wide">space</span><span class="key go">done</span></div>
+      </div>
+    </div>
+  </div></div>
+  <div class="label"><b>7 · precise edit</b><span class="sub">tap transcript → system keyboard; buttons hidden until dismissed</span></div>
+</div>
+
+<!-- 8 · confirmed -->
+<div class="mockup">
+  <div class="phone-frame"><div class="phone">
+    <div class="term">
+      <div class="term-title"><span class="run">●</span> build · web</div>
+      <div class="term-body"><span class="line"><span class="path">~/proj</span> <span class="prompt">$</span> git status</span><span class="line"><span class="dim">On branch main</span></span><span class="line"><span class="dim">nothing to commit, working tree clean</span></span><span class="line"><span class="path">~/proj</span> <span class="prompt">$</span> <span class="cursor"> </span></span></div>
+    </div>
+    <div class="speak-handle"><span class="bar"></span></div>
+  </div></div>
+  <div class="label"><b>8 · confirmed</b><span class="sub">Confirm injects text + Enter; surface gone</span></div>
+</div>
+
+<div class="section">Animated</div>
+
+<!-- animated: arm → mount (compressed; block from top, panel from bottom, flash) -->
+<div class="mockup">
+  <div class="phone-frame"><div class="phone">
+    <div class="behind">
+      <div class="term">
+        <div class="term-title"><span class="run">●</span> build · web</div>
+        <div class="term-body"><span class="line"><span class="path">~/proj</span> <span class="prompt">$</span> <span class="cursor"> </span></span></div>
+      </div>
+    </div>
+    <div class="rec-surface demo-mount">
+      <div class="rec-block">
+        <div class="rec-top"><span class="rec-dot"></span><span class="rec-time">0:00</span><span class="rec-status"></span></div>
+        <div class="wave"><i style="height:14px;animation-delay:-0.00s"></i><i style="height:26px;animation-delay:-0.08s"></i><i style="height:18px;animation-delay:-0.16s"></i><i style="height:30px;animation-delay:-0.24s"></i><i style="height:14px;animation-delay:-0.32s"></i><i style="height:24px;animation-delay:-0.40s"></i><i style="height:16px;animation-delay:-0.48s"></i><i style="height:28px;animation-delay:-0.56s"></i><i style="height:20px;animation-delay:-0.64s"></i><i style="height:26px;animation-delay:-0.72s"></i></div>
+      </div>
+      <div class="rec-free"></div>
+      <div class="flash"></div>
+    </div>
+  </div></div>
+  <div class="label"><b>▶ arm → mount</b><span class="sub">block fades in at top, panel rises from bottom; flash = capture starts</span></div>
+</div>
+
+<!-- animated: lock (buttons rise from below; area darkens; flash) -->
+<div class="mockup">
+  <div class="phone-frame"><div class="phone">
+    <div class="rec-surface locked demo-lock">
+      <div class="rec-block">
+        <div class="rec-top"><span class="rec-dot"></span><span class="rec-time">0:18</span><span class="rec-status"></span></div>
+        <div class="wave"><i style="height:14px;animation-delay:-0.00s"></i><i style="height:26px;animation-delay:-0.08s"></i><i style="height:18px;animation-delay:-0.16s"></i><i style="height:30px;animation-delay:-0.24s"></i><i style="height:14px;animation-delay:-0.32s"></i><i style="height:24px;animation-delay:-0.40s"></i><i style="height:16px;animation-delay:-0.48s"></i><i style="height:28px;animation-delay:-0.56s"></i><i style="height:20px;animation-delay:-0.64s"></i><i style="height:26px;animation-delay:-0.72s"></i></div>
+      </div>
+      <div class="rec-buttons"><span class="rec-btn">Cancel</span><span class="rec-btn">Send</span></div>
+      <div class="rec-free"></div>
+      <div class="flash"></div>
+    </div>
+  </div></div>
+  <div class="label"><b>▶ lock</b><span class="sub">Cancel/Send rise from below the block; hands-free area darkens</span></div>
+</div>
+
+<!-- animated: send → review -->
+<div class="mockup">
+  <div class="phone-frame"><div class="phone">
+    <div class="rec-surface demo-rev">
+      <div class="m-cap">
+        <div class="rec-block calm">
+          <div class="rec-top"><span class="rec-dot"></span><span class="rec-time">0:11</span><span class="rec-status">transcribing…</span></div>
+          <div class="wave"><i style="height:18px;animation-delay:-0.00s"></i><i style="height:18px;animation-delay:-0.12s"></i><i style="height:18px;animation-delay:-0.24s"></i><i style="height:18px;animation-delay:-0.36s"></i><i style="height:18px;animation-delay:-0.48s"></i><i style="height:18px;animation-delay:-0.60s"></i><i style="height:18px;animation-delay:-0.72s"></i></div>
+        </div>
+        <div class="rec-free"></div>
+      </div>
+      <div class="m-rev">
+        <div class="review-body"><div class="transcript">git status</div></div>
+        <div class="review-btns"><span class="review-btn cancel">Cancel</span><span class="review-btn">Adjust</span><span class="review-btn confirm">Confirm</span></div>
+      </div>
+    </div>
+  </div></div>
+  <div class="label"><b>▶ send → review</b><span class="sub">pulsate, then the surface becomes the transcript panel</span></div>
+</div>
+
+</body>
+</html>
