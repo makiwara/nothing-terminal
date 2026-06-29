@@ -26,6 +26,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -38,6 +39,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.delay
 import com.humanemagica.nothing.terminal.net.CockpitModel
 import com.humanemagica.nothing.terminal.net.Review
 import com.humanemagica.nothing.terminal.net.Script
@@ -134,22 +136,32 @@ private fun ManagerPage(
     onHalt: (String) -> Unit,
     onAdd: () -> Unit,
 ) {
+    // A 1s tick so running sessions' ages advance without waiting for a ring refresh.
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            now = System.currentTimeMillis()
+            delay(1000)
+        }
+    }
     Column(Modifier.fillMaxSize()) {
         InvertedHeader("OPEN TERMINALS")
         Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 14.dp)) {
             if (ring.isEmpty()) {
                 Text("No open sessions", color = Cyan.muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 9.dp))
             } else {
-                // started_at / state metadata is a v1 control-plane addition (specs/control_plane.md);
-                // until the backend returns it, the dot is a static "running" marker and there is no age.
                 ring.forEach { s ->
+                    val running = s.state != "exited"
                     Row(
                         Modifier.fillMaxWidth().padding(vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Box(Modifier.size(8.dp).clip(CircleShape).background(Cyan.accent))
-                        Text(s.label, color = Cyan.ink, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(if (running) Cyan.accent else Cyan.faint))
+                        Column(Modifier.weight(1f)) {
+                            Text(s.label, color = Cyan.ink, fontSize = 13.sp)
+                            sessionMeta(s, running, now)?.let { Text(it, color = Cyan.muted, fontSize = 11.sp) }
+                        }
                         Box(
                             Modifier.border(1.dp, Cyan.muted).clickable { onHalt(s.id) }
                                 .padding(horizontal = 12.dp, vertical = 5.dp),
@@ -168,6 +180,27 @@ private fun ManagerPage(
     }
 }
 
+/** Row subtitle: running → uptime from started_at; exited → why it ended (the v1 exit_reason). */
+private fun sessionMeta(s: Session, running: Boolean, nowMs: Long): String? {
+    if (!running) {
+        return when (s.exitReason) {
+            "host_restarted" -> "host restarted"
+            "halted" -> "halted"
+            "child_exited" -> s.exitCode?.let { "exited · code $it" } ?: "exited"
+            else -> "exited"
+        }
+    }
+    if (s.startedAt.isEmpty()) return null
+    return runCatching {
+        val secs = ((nowMs - java.time.Instant.parse(s.startedAt).toEpochMilli()) / 1000).coerceAtLeast(0)
+        when {
+            secs < 60 -> "up ${secs}s"
+            secs < 3600 -> "up ${secs / 60}m"
+            else -> "up ${secs / 3600}h${(secs % 3600) / 60}m"
+        }
+    }.getOrNull()
+}
+
 /** The preset selector: a separate full screen. Pick a preset → open a panel in the ring. */
 @Composable
 private fun PresetSelector(scripts: List<Script>, onPick: (String) -> Unit, onCancel: () -> Unit) {
@@ -183,6 +216,9 @@ private fun PresetSelector(scripts: List<Script>, onPick: (String) -> Unit, onCa
                 scripts.forEach { sc ->
                     Column(Modifier.fillMaxWidth().clickable { onPick(sc.id) }.padding(vertical = 9.dp)) {
                         Text(sc.label, color = Cyan.accent, fontSize = 13.sp)
+                        if (sc.command.isNotEmpty()) {
+                            Text(sc.command, color = Cyan.muted, fontSize = 11.sp)
+                        }
                     }
                     HorizontalDivider(color = Cyan.rule)
                 }
@@ -233,7 +269,7 @@ private fun ReviewOverlay(r: Review) {
             )
             Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ReviewButton("Cancel", Cyan.danger, Modifier.weight(1f)) { CockpitModel.cancelReview() }
-                ReviewButton("Adjust", Cyan.accent, Modifier.weight(1f)) { CockpitModel.cancelReview() }
+                ReviewButton("Adjust", Cyan.accent, Modifier.weight(1f)) { CockpitModel.adjust(edited) }
                 ReviewButton("Confirm", Cyan.bg, Modifier.weight(1f), fill = Cyan.accent) { CockpitModel.confirm(edited) }
             }
         }

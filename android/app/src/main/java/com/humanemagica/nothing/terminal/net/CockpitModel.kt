@@ -51,6 +51,10 @@ object CockpitModel {
     private val _transcribing = MutableStateFlow(false)
     val transcribing: StateFlow<Boolean> = _transcribing
 
+    /** Prior transcript carried into the next propose when the operator chose Adjust (refine).
+     *  Set by [adjust], consumed once by the next [onCaptured]. */
+    private var pendingContext: String? = null
+
     fun start(context: Context, baseUrl: String, token: String) {
         this.token = token
         this.wsBase = baseUrl.replaceFirst("http", "ws").trimEnd('/')
@@ -98,10 +102,12 @@ object CockpitModel {
      *  for review, then drop the file. Runs on the recorder's IO coroutine. */
     private suspend fun onCaptured(path: String, durationSec: Int) {
         val sid = activeSessionId ?: run { File(path).delete(); return }
+        val context = pendingContext
+        pendingContext = null
         _transcribing.value = true
         try {
             val audio = withContext(Dispatchers.IO) { File(path).readBytes() }
-            val p = api.voice(sid, audio)
+            val p = api.voice(sid, audio, context)
             _review.value = Review(sid, p.transcript, p.action)
         } catch (e: Exception) {
             _review.value = Review(sid, "voice failed: ${e.message}", null)
@@ -115,6 +121,7 @@ object CockpitModel {
     fun confirm(editedText: String) {
         val r = _review.value ?: return
         _review.value = null
+        pendingContext = null
         val action = when (val a = r.action) {
             is Action.Signal -> a
             else -> Action.Text(editedText)
@@ -124,5 +131,18 @@ object CockpitModel {
 
     fun cancelReview() {
         _review.value = null
+        pendingContext = null
+    }
+
+    /** Adjust: re-record to refine. Carry the reviewed transcript as context for the next propose,
+     *  dismiss the review, and bring the recorder back up hands-free per specs/ui/review.md. We drive
+     *  the vendored controller through its public gesture API (arm → mount → lock) so it re-enters
+     *  RECORDING without a finger; Send/Cancel on the locked surface then drive it. */
+    fun adjust(priorTranscript: String) {
+        pendingContext = priorTranscript
+        _review.value = null
+        recorder.arm()
+        recorder.updateDrag(0f) // Arming → mount: capture starts (Held)
+        recorder.updateDrag(0f) // Held → Locked: hands-free, button-driven
     }
 }
