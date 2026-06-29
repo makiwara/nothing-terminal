@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -182,6 +183,31 @@ func TestControlPlane(t *testing.T) {
 	}
 	if code, body := get("/sessions"); code != 200 || strings.Contains(body, sess.ID) {
 		t.Fatalf("ring not empty after close: %s", body)
+	}
+}
+
+// TestVoiceRefine checks the mock echoes an Adjust re-record's multipart context part,
+// so the refine round-trip is observable against the stand-in.
+func TestVoiceRefine(t *testing.T) {
+	sess := &Session{ID: "s1", state: "running", closeFn: func() {}}
+	reg := &Registry{sessions: map[string]*Session{"s1": sess}, order: []string{"s1"}}
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	aw, _ := mw.CreateFormField("audio")
+	_, _ = aw.Write([]byte("ogg-bytes"))
+	cw, _ := mw.CreateFormField("context")
+	_, _ = cw.Write([]byte(`{"transcript":"git log"}`))
+	mw.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/sessions/s1/voice", &buf)
+	req.SetPathValue("id", "s1")
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	rec := httptest.NewRecorder()
+	reg.handleVoice(rec, req)
+
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `git log (refined)`) {
+		t.Fatalf("voice refine = %d %s", rec.Code, rec.Body.String())
 	}
 }
 

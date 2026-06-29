@@ -77,13 +77,15 @@ func (r *Registry) handleCloseSession(w http.ResponseWriter, req *http.Request) 
 }
 
 // handleVoice is the mock propose step: there is no STT here, so it returns a
-// canned proposal. ?intent=stop returns a signal action; otherwise a text action.
+// canned proposal. The audio part is discarded; an Adjust re-record's optional
+// `context` part is echoed into the proposal so the refine round-trip is visible
+// without a real backend. ?intent=stop returns a signal action.
 func (r *Registry) handleVoice(w http.ResponseWriter, req *http.Request) {
 	if r.Get(req.PathValue("id")) == nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	_, _ = io.Copy(io.Discard, req.Body) // ignore the uploaded audio
+	context := readVoiceContext(req)
 	if req.URL.Query().Get("intent") == "stop" {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"transcript": "stop",
@@ -91,10 +93,44 @@ func (r *Registry) handleVoice(w http.ResponseWriter, req *http.Request) {
 		})
 		return
 	}
+	transcript := "git status"
+	if context != "" {
+		transcript = context + " (refined)" // prove the Adjust context arrived over the wire
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"transcript": "git status",
-		"action":     map[string]string{"kind": "text", "text": "git status"},
+		"transcript": transcript,
+		"action":     map[string]string{"kind": "text", "text": transcript},
 	})
+}
+
+// readVoiceContext drains the multipart upload and returns the prior transcript from
+// the optional JSON `context` part (specs/control_plane.md). A non-multipart body
+// (older client, manual curl) yields no context.
+func readVoiceContext(req *http.Request) string {
+	mr, err := req.MultipartReader()
+	if err != nil {
+		_, _ = io.Copy(io.Discard, req.Body)
+		return ""
+	}
+	context := ""
+	for {
+		part, err := mr.NextPart()
+		if err != nil {
+			break
+		}
+		if part.FormName() == "context" {
+			b, _ := io.ReadAll(io.LimitReader(part, 1<<16))
+			var c struct {
+				Transcript string `json:"transcript"`
+			}
+			_ = json.Unmarshal(b, &c)
+			context = c.Transcript
+		} else {
+			_, _ = io.Copy(io.Discard, part)
+		}
+		part.Close()
+	}
+	return context
 }
 
 // handleSend injects the confirmed action into the session PTY.
