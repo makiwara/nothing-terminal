@@ -3,6 +3,7 @@ package com.humanemagica.nothing.terminal.net
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -25,7 +26,7 @@ class ControlApi(baseUrl: String, private val token: String) {
     suspend fun scripts(): List<Script> = withContext(Dispatchers.IO) {
         http.newCall(req("/scripts").get().build()).execute().use { r ->
             val arr = JSONArray(r.body!!.string())
-            (0 until arr.length()).map { val o = arr.getJSONObject(it); Script(o.getString("id"), o.getString("label")) }
+            (0 until arr.length()).map { val o = arr.getJSONObject(it); Script(o.getString("id"), o.getString("label"), o.optString("command")) }
         }
     }
 
@@ -47,10 +48,19 @@ class ControlApi(baseUrl: String, private val token: String) {
         http.newCall(req("/sessions/$id").delete().build()).execute().close()
     }
 
-    /** Propose: upload audio (ignored by the mock), get back the proposed action. */
-    suspend fun voice(id: String, audio: ByteArray?): Proposal = withContext(Dispatchers.IO) {
-        val body = (audio ?: ByteArray(0)).toRequestBody("application/octet-stream".toMediaType())
-        http.newCall(req("/sessions/$id/voice").post(body).build()).execute().use { r ->
+    /** Propose: multipart upload of the OGG/Opus audio plus, for Adjust, the prior transcript as a
+     *  JSON `context` part; get back the proposed action. Side-effect-free. */
+    suspend fun voice(id: String, audio: ByteArray?, context: String? = null): Proposal = withContext(Dispatchers.IO) {
+        val form = MultipartBody.Builder().setType(MultipartBody.FORM)
+        form.addFormDataPart(
+            "audio", "audio.ogg",
+            (audio ?: ByteArray(0)).toRequestBody("audio/ogg; codecs=opus".toMediaType()),
+        )
+        if (!context.isNullOrEmpty()) {
+            val ctx = JSONObject().put("transcript", context).toString().toRequestBody(jsonType)
+            form.addFormDataPart("context", null, ctx)
+        }
+        http.newCall(req("/sessions/$id/voice").post(form.build()).build()).execute().use { r ->
             val o = JSONObject(r.body!!.string())
             Proposal(o.getString("transcript"), o.optJSONObject("action")?.let { actionFrom(it) })
         }
@@ -69,6 +79,10 @@ class ControlApi(baseUrl: String, private val token: String) {
 
     private fun sessionFrom(o: JSONObject) = Session(
         o.getString("id"), o.optString("script_id"), o.optString("label"), o.optInt("cols"), o.optInt("rows"),
+        state = o.optString("state", "running"),
+        startedAt = o.optString("started_at"),
+        exitCode = if (o.isNull("exit_code")) null else o.optInt("exit_code").takeIf { o.has("exit_code") },
+        exitReason = o.optString("exit_reason").takeIf { it.isNotEmpty() },
     )
 
     private fun actionFrom(o: JSONObject): Action =

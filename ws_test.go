@@ -144,7 +144,8 @@ func TestControlPlane(t *testing.T) {
 		return resp.StatusCode, string(b)
 	}
 
-	if code, body := get("/scripts"); code != 200 || !strings.Contains(body, `"demo"`) {
+	if code, body := get("/scripts"); code != 200 || !strings.Contains(body, `"demo"`) ||
+		!strings.Contains(body, `"command":"demo: demo"`) {
 		t.Fatalf("GET /scripts = %d %s", code, body)
 	}
 
@@ -157,7 +158,8 @@ func TestControlPlane(t *testing.T) {
 		t.Fatalf("open session body: %s", body)
 	}
 
-	if code, body := get("/sessions"); code != 200 || !strings.Contains(body, sess.ID) {
+	if code, body := get("/sessions"); code != 200 || !strings.Contains(body, sess.ID) ||
+		!strings.Contains(body, `"state":"running"`) || !strings.Contains(body, `"started_at"`) {
 		t.Fatalf("GET /sessions = %d %s", code, body)
 	}
 
@@ -180,5 +182,27 @@ func TestControlPlane(t *testing.T) {
 	}
 	if code, body := get("/sessions"); code != 200 || strings.Contains(body, sess.ID) {
 		t.Fatalf("ring not empty after close: %s", body)
+	}
+}
+
+// TestExitedRetention checks the v1 exit shape and that an exited session stays in
+// the ring until an explicit DELETE (the child-exit retention rule). No PTY needed.
+func TestExitedRetention(t *testing.T) {
+	sess := &Session{ID: "s1", ScriptID: "demo", Label: "Demo", state: "running", startedAt: time.Now(), closeFn: func() {}}
+	reg := &Registry{sessions: map[string]*Session{"s1": sess}, order: []string{"s1"}}
+
+	sess.markExited(2, "child_exited")
+
+	body, _ := json.Marshal(reg.List())
+	for _, want := range []string{`"state":"exited"`, `"exit_code":2`, `"exit_reason":"child_exited"`} {
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("exited session JSON missing %s: %s", want, body)
+		}
+	}
+	if len(reg.List()) != 1 {
+		t.Fatalf("exited session dropped from ring before DELETE")
+	}
+	if !reg.Close("s1") || len(reg.List()) != 0 {
+		t.Fatalf("DELETE did not remove the exited session")
 	}
 }

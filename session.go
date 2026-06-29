@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os/exec"
@@ -26,19 +27,65 @@ type demoSpec struct {
 	color int // ANSI foreground digit 0-7
 }
 
+// commandHint is the selector's line under the label: the real command, or a demo tag.
+func (s Script) commandHint() string {
+	if s.command != nil {
+		return strings.Join(s.command, " ")
+	}
+	if s.demo != nil {
+		return "demo: " + s.demo.title
+	}
+	return ""
+}
+
 // Session is one open terminal: a hub over either a PTY or a generated stream.
 type Session struct {
-	ID       string `json:"id"`
-	ScriptID string `json:"script_id"`
-	Label    string `json:"label"`
-	Cols     int    `json:"cols"`
-	Rows     int    `json:"rows"`
+	ID       string
+	ScriptID string
+	Label    string
+	Cols     int
+	Rows     int
 
 	hub     *Hub
 	closeFn func()
 
-	mu       sync.Mutex
-	lastSent string // demo only: most recent injected input, echoed on screen
+	mu         sync.Mutex
+	lastSent   string // demo only: most recent injected input, echoed on screen
+	startedAt  time.Time
+	state      string // "running" | "exited"
+	exitCode   *int
+	exitReason string // set with state=="exited": "child_exited" (the stand-in's only exit path)
+}
+
+// MarshalJSON emits the client-facing session shape (control_plane.md), locking so
+// the late-mutated exit fields don't race the encoder reading the ring.
+func (s *Session) MarshalJSON() ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return json.Marshal(struct {
+		ID         string `json:"id"`
+		ScriptID   string `json:"script_id"`
+		Label      string `json:"label"`
+		Cols       int    `json:"cols"`
+		Rows       int    `json:"rows"`
+		State      string `json:"state"`
+		StartedAt  string `json:"started_at"`
+		ExitCode   *int   `json:"exit_code,omitempty"`
+		ExitReason string `json:"exit_reason,omitempty"`
+	}{
+		ID: s.ID, ScriptID: s.ScriptID, Label: s.Label, Cols: s.Cols, Rows: s.Rows,
+		State: s.state, StartedAt: s.startedAt.UTC().Format(time.RFC3339),
+		ExitCode: s.exitCode, ExitReason: s.exitReason,
+	})
+}
+
+// markExited retains a session whose child has exited, flipping it out of "running".
+func (s *Session) markExited(code int, reason string) {
+	s.mu.Lock()
+	s.state = "exited"
+	s.exitCode = &code
+	s.exitReason = reason
+	s.mu.Unlock()
 }
 
 // Inject writes input bytes into the session (the voice "send" path).
@@ -112,7 +159,7 @@ func (r *Registry) Open(scriptID string) (*Session, error) {
 	id := fmt.Sprintf("s%d", r.nextID)
 	r.mu.Unlock()
 
-	sess := &Session{ID: id, ScriptID: sc.ID, Label: sc.Label}
+	sess := &Session{ID: id, ScriptID: sc.ID, Label: sc.Label, state: "running", startedAt: time.Now()}
 
 	if sc.command != nil {
 		cmd := exec.Command(sc.command[0], sc.command[1:]...)
@@ -127,7 +174,14 @@ func (r *Registry) Open(scriptID string) (*Session, error) {
 		sess.closeFn = func() { _ = cmd.Process.Kill(); ptmx.Close() }
 		go func() {
 			sess.hub.pumpOutput()
-			r.Close(id) // child exited
+			code := 0
+			if err := cmd.Wait(); err != nil {
+				if exitErr, ok := err.(*exec.ExitError); ok {
+					code = exitErr.ExitCode()
+				}
+			}
+			ptmx.Close()
+			sess.markExited(code, "child_exited") // retain as exited until an explicit DELETE
 		}()
 	} else {
 		pr, pw := io.Pipe()

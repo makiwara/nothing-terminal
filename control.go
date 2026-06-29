@@ -40,12 +40,13 @@ func authed(token string, h http.HandlerFunc) http.HandlerFunc {
 
 func (r *Registry) handleScripts(w http.ResponseWriter, _ *http.Request) {
 	type item struct {
-		ID    string `json:"id"`
-		Label string `json:"label"`
+		ID      string `json:"id"`
+		Label   string `json:"label"`
+		Command string `json:"command"`
 	}
 	out := []item{}
 	for _, s := range r.Scripts() {
-		out = append(out, item{s.ID, s.Label})
+		out = append(out, item{s.ID, s.Label, s.commandHint()})
 	}
 	writeJSON(w, http.StatusOK, out)
 }
