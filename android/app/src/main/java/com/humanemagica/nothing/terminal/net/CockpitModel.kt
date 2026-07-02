@@ -51,6 +51,14 @@ object CockpitModel {
     private val _transcribing = MutableStateFlow(false)
     val transcribing: StateFlow<Boolean> = _transcribing
 
+    /** A transient operator-facing message (e.g. a failed open), shown then auto-dismissed. */
+    private val _notice = MutableStateFlow<String?>(null)
+    val notice: StateFlow<String?> = _notice
+
+    /** Id of a freshly opened session the ring should scroll to; cleared once the pager lands. */
+    private val _focus = MutableStateFlow<String?>(null)
+    val focus: StateFlow<String?> = _focus
+
     /** Prior transcript carried into the next propose when the operator chose Adjust (refine).
      *  Set by [adjust], consumed once by the next [onCaptured]. */
     private var pendingContext: String? = null
@@ -84,18 +92,24 @@ object CockpitModel {
 
     fun open(scriptId: String) = scope.launch {
         try {
-            api.open(scriptId)
+            val session = api.open(scriptId)
             _ring.value = api.sessions()
-        } catch (_: Exception) {
+            _focus.value = session.id
+        } catch (e: Exception) {
+            _notice.value = e.message ?: "Could not open terminal"
         }
     }
 
+    fun showNotice(message: String) { _notice.value = message }
+    fun dismissNotice() { _notice.value = null }
+    fun focusHandled() { _focus.value = null }
+
     fun close(sessionId: String) = scope.launch {
-        try {
-            api.close(sessionId)
-            _ring.value = api.sessions()
-        } catch (_: Exception) {
-        }
+        // Drop the row on a confirmed halt so it disappears even if the reconcile fetch fails;
+        // then refresh best-effort to pick up any other changes.
+        val gone = try { api.close(sessionId) } catch (_: Exception) { false }
+        if (gone) _ring.value = _ring.value.filterNot { it.id == sessionId }
+        try { _ring.value = api.sessions() } catch (_: Exception) {}
     }
 
     /** Recorder sink: upload the captured OGG to propose (side-effect-free), surface the proposal

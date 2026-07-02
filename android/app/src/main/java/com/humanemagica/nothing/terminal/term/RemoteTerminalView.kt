@@ -28,6 +28,7 @@ class RemoteTerminalView(
     context: Context,
     private val wsUrl: String,
     private val token: String,
+    private val onDisconnect: () -> Unit,
 ) : View(context), SessionConnection.Sink {
 
     private val renderer: TerminalRenderer
@@ -95,6 +96,8 @@ class RemoteTerminalView(
         }
         invalidate()
     }
+
+    override fun onFailure() = onDisconnect()
 
     override fun onBytes(data: ByteArray) {
         val e = emulator

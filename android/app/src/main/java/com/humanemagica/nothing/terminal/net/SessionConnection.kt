@@ -23,6 +23,8 @@ class SessionConnection(private val wsUrl: String, private val token: String) {
     interface Sink {
         fun onBytes(data: ByteArray)
         fun onServerSize(cols: Int, rows: Int)
+        /** The data plane dropped (or never delivered). No reconnect follows. */
+        fun onFailure()
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -72,6 +74,7 @@ class SessionConnection(private val wsUrl: String, private val token: String) {
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
             Log.w("SessionConnection", "ws failure for $wsUrl", t)
+            main.post { sink?.onFailure() }
         }
     }
 }

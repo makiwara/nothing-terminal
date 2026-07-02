@@ -49,4 +49,4 @@ When no sessions are open, the only ring page is the manager, showing "No open s
 - Catalog: `GET /scripts`.
 - Open: `POST /sessions {script_id}`.
 
-All control-plane calls are Bearer-token'd over WSS to the home host; the exact REST shapes — including the `started_at`/`state` session metadata and exited-session retention this manager needs — are specified in `../control_plane.md` (v1 additions, pending in the stand-in and the backend).
+All control-plane calls are Bearer-token'd over WSS to the home host; the exact REST shapes — including the `started_at`/`state` session metadata and exited-session retention this manager needs — are specified in `../control_plane.md` (v1 additions).

@@ -9,6 +9,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
 
 /**
  * The REST control plane: scripts, the session ring, and the voice propose/send
@@ -40,12 +41,19 @@ class ControlApi(baseUrl: String, private val token: String) {
     suspend fun open(scriptId: String): Session = withContext(Dispatchers.IO) {
         val body = JSONObject().put("script_id", scriptId).toString().toRequestBody(jsonType)
         http.newCall(req("/sessions").post(body).build()).execute().use { r ->
-            sessionFrom(JSONObject(r.body!!.string()))
+            val text = r.body?.string().orEmpty()
+            if (!r.isSuccessful) throw IOException(serverError(text) ?: "open failed (HTTP ${r.code})")
+            sessionFrom(JSONObject(text))
         }
     }
 
-    suspend fun close(id: String) = withContext(Dispatchers.IO) {
-        http.newCall(req("/sessions/$id").delete().build()).execute().close()
+    /** The backend reports failures as {"error": "..."}; pull that out for the operator. */
+    private fun serverError(body: String): String? =
+        runCatching { JSONObject(body).optString("error").ifBlank { null } }.getOrNull()
+
+    /** Halt a session. True once it is gone: 2xx, or 404 (already gone). */
+    suspend fun close(id: String): Boolean = withContext(Dispatchers.IO) {
+        http.newCall(req("/sessions/$id").delete().build()).execute().use { it.isSuccessful || it.code == 404 }
     }
 
     /** Propose: multipart upload of the OGG/Opus audio plus, for Adjust, the prior transcript as a

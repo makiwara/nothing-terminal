@@ -1,6 +1,6 @@
 # Terminal cockpit — control plane (REST)
 
-The REST control plane the cockpit uses to list scripts, manage the session ring, and run the voice propose/send flow. It complements `protocol.md`, which is the per-session WebSocket data plane; together they are the contract between the Android client and any server. The Go `termshare` stand-in in this repo implements it; the `nothing-serious` `terminals/` service must implement it identically. As with `protocol.md`: if a change is needed, change this doc first and flag that the backend — and the stand-in — must follow.
+The REST control plane the cockpit uses to list scripts, manage the session ring, and run the voice propose/send flow. It complements `protocol.md`, which is the per-session WebSocket data plane; together they are the contract between the Android client and any server. The `nothing-serious` `remote_coding` service implements it. As with `protocol.md`: if a change is needed, change this doc first and flag that the backend must follow.
 
 ## Conventions
 
@@ -8,9 +8,9 @@ The REST control plane the cockpit uses to list scripts, manage the session ring
 - Auth: a device bearer token (`TERMINALS_DEVICE_TOKEN`). Production sends `Authorization: Bearer <t>`; the prototype also accepts `?token=<t>`. When the server is configured with a token every endpoint is gated; missing or wrong → 401.
 - Request bodies are JSON, except `POST …/voice`, which is `multipart/form-data` (see [Voice upload encoding](#voice-upload-encoding)). Errors return `{"error": "<message>"}` with a 4xx status (404 for an unknown session or script).
 
-## v0 — implemented by the stand-in
+## v0 — the baseline
 
-Live in `termshare` today; this is the baseline.
+The original endpoints the contract shipped with; the cockpit rework's additions are in v1 below.
 
 - `GET /scripts` — the catalog the selector lists.
 - `GET /sessions` — the open ring, in order.
@@ -49,7 +49,7 @@ The transcription language is a backend concern, resolved from the backend's own
 
 ## v1 — required by the cockpit rework
 
-The new UI (`ui/`) needs the following. The client and the Go stand-in implement them; the `nothing-serious` backend must follow. The stand-in models `exit_reason` only as `child_exited` (a child exiting on its own) — `halted` and `host_restarted` are backend reconcile semantics it has no notion of. Each ties to a surface.
+The new UI (`ui/`) needs the following; the `nothing-serious` backend implements them. `exit_reason` distinguishes a child exiting on its own (`child_exited`) from backend reconcile semantics (`halted`, `host_restarted`). Each ties to a surface.
 
 1. Session display metadata — for the ring manager (`ui/ring.md`). Add to each `session`:
 
@@ -60,9 +60,9 @@ exit_code:   int       # present when state == "exited"
 exit_reason: string    # present when state == "exited": "host_restarted" | "halted" | "child_exited"; the manager shows why
 ```
 
-2. Exited-session retention — for the ring manager. A session whose script exits stays in `GET /sessions` with `state: "exited"` until an explicit `DELETE`. This changes v0, where a child exit auto-drops the session from the ring ([session.go](../session.go) `Open` → `Close` on child exit). Tradeoff: retention lets the operator see and dismiss a finished session, at the cost of holding dead session metadata; the alternative keeps auto-drop and the manager simply never shows an exited row. Decision: retain — the design shows exited rows. The backend must confirm it can.
+2. Exited-session retention — for the ring manager. A session whose script exits stays in `GET /sessions` with `state: "exited"` until an explicit `DELETE`. This changes the v0 baseline, where a child exit auto-dropped the session from the ring. Tradeoff: retention lets the operator see and dismiss a finished session, at the cost of holding dead session metadata; the alternative keeps auto-drop and the manager simply never shows an exited row. Decision: retain — the design shows exited rows. The backend must confirm it can.
 
-3. Script display hint — for the preset selector. Add `command` (or `hint`) to each `script`, so the selector can show the command under the name. The stand-in returns only `{id, label}` today.
+3. Script display hint — for the preset selector. Add `command` (or `hint`) to each `script`, so the selector can show the command under the name. The v0 baseline `script` shape carries only `{id, label}`.
 
 4. Voice refine context — for review → Adjust. `POST /sessions/{id}/voice` carries the prior transcript in an optional `context` part, so a re-record refines rather than starts cold. Encoding in [Voice upload encoding](#voice-upload-encoding).
 

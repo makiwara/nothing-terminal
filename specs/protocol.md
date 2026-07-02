@@ -1,9 +1,8 @@
 # Terminal-over-WebSocket protocol (v0)
 
 This is the wire contract between a terminal **client** (the Android app) and a
-**server** that owns a PTY-backed session. The Go `termshare` stand-in in this
-repo implements it; the future `nothing-serious` `terminals/` service (Python)
-MUST implement it identically, so the same Android app works against both.
+**server** that owns a PTY-backed session. The `nothing-serious` `remote_coding`
+service (Python) implements it, so the Android app works against it.
 
 The guiding principle is **transparent, bidirectional, raw-byte passthrough**:
 the PTY master byte stream is the ground truth and is forwarded verbatim into a
